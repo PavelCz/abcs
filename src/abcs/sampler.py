@@ -318,7 +318,7 @@ class BinarySearchSampler:
         # Track progress for convergence detection in unbounded mode
         initial_empty_bins = len(empty_return_bins)
         consecutive_failures = 0
-        max_consecutive_failures = 3  # Stop after 3 consecutive failures
+        max_consecutive_failures = 10  # Stop after 3 consecutive failures
 
         for bin_idx, target_return, return_min, return_max in empty_return_bins:
             # Skip evaluation limit check in unbounded mode
