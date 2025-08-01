@@ -336,7 +336,7 @@ class BinarySearchSampler:
         target_return: float,
         return_min: float,
         return_max: float,
-        max_iterations: int = 10,
+        max_iterations: Optional[int] = None,
     ) -> Optional[SamplePoint]:
         """
         Binary search for an input value that produces a return in the specified range.
@@ -346,11 +346,18 @@ class BinarySearchSampler:
             target_return: Target return value (midpoint of range)
             return_min: Minimum acceptable return value
             return_max: Maximum acceptable return value
-            max_iterations: Maximum binary search iterations
+            max_iterations: Maximum binary search iterations (None = use defaults)
 
         Returns:
             SamplePoint if found, None if not found within max_iterations
         """
+        # Set max_iterations based on mode
+        if max_iterations is None:
+            if self.unbounded_mode:
+                max_iterations = 100  # Much higher limit for unbounded mode
+            else:
+                max_iterations = 10  # Default for bounded mode
+
         # Sort existing samples by return value to use for interpolation
         samples_with_returns = []
         for sample in existing_samples:
