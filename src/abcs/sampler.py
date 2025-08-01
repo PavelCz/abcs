@@ -32,6 +32,7 @@ class BinarySearchSampler:
         verbose: bool = True,
         return_bins: int = 0,
         max_additional_evals: int = 20,
+        unbounded_mode: bool = False,
     ):
         """
         Initialize the ABCS sampler.
@@ -47,6 +48,10 @@ class BinarySearchSampler:
             verbose: Whether to print progress messages
             return_bins: Number of return bins for curve smoothing (0 = disabled)
             max_additional_evals: Maximum additional evaluations for return refinement
+                                 (ignored when unbounded_mode=True)
+            unbounded_mode: If True, removes evaluation limits and continues until
+                           all bins are filled or no progress can be made. Provides
+                           theoretical convergence guarantees for monotonic functions.
         """
         self.eval_function = eval_function
         self.num_bins = num_bins
@@ -56,6 +61,7 @@ class BinarySearchSampler:
         self.verbose = verbose
         self.return_bins = return_bins
         self.max_additional_evals = max_additional_evals
+        self.unbounded_mode = unbounded_mode
 
         # Initialize bins
         self.bin_edges: NDArray[np.float64] = np.linspace(
