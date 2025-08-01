@@ -10,6 +10,13 @@ import numpy as np
 from typing import Tuple, Dict, Any
 from abcs import BinarySearchSampler
 
+# Import visualization utilities
+try:
+    from .visualization_utils import save_test_artifacts, print_artifact_summary
+    VISUALIZATION_AVAILABLE = True
+except ImportError:
+    VISUALIZATION_AVAILABLE = False
+
 
 def create_test_evaluation_function(add_noise=True, full_range=False):
     """
@@ -192,6 +199,16 @@ def test_full_coverage():
         if not y_axis_pass:
             print(f"  - Y-axis coverage: {y_axis_coverage:.1f}% (expected 100%)")
 
+    # Generate test artifacts
+    if VISUALIZATION_AVAILABLE:
+        artifacts = save_test_artifacts(
+            samples=samples,
+            sampler=sampler,
+            test_name="full_coverage",
+            all_samples=all_samples
+        )
+        print_artifact_summary(artifacts)
+    
     # Return test result
     return x_axis_pass and y_axis_pass
 
@@ -304,6 +321,10 @@ def test_afhp_coverage_guarantee():
     # Test with various bin counts - use reasonable values
     bin_counts = [5, 10, 20]
     all_passed = True
+    
+    # Keep track of the largest test for artifact generation
+    largest_test_samples = None
+    largest_test_sampler = None
 
     for num_bins in bin_counts:
         sampler = BinarySearchSampler(
@@ -318,6 +339,11 @@ def test_afhp_coverage_guarantee():
         _samples = sampler.run()
         summary = sampler.get_coverage_summary()
         coverage = summary["coverage_percentage"]
+        
+        # Keep the largest test for artifact generation
+        if num_bins == 20:  # Save the most comprehensive test
+            largest_test_samples = _samples
+            largest_test_sampler = sampler
 
         # For reasonable bin counts, we should get 100% coverage
         passed = coverage == 100.0
@@ -332,6 +358,15 @@ def test_afhp_coverage_guarantee():
             gaps = summary.get("gaps", [])
             if gaps:
                 print(f"  Missing bins: {gaps}")
+
+    # Generate test artifacts for the most comprehensive test
+    if VISUALIZATION_AVAILABLE and largest_test_samples and largest_test_sampler:
+        artifacts = save_test_artifacts(
+            samples=largest_test_samples,
+            sampler=largest_test_sampler,
+            test_name="afhp_coverage_guarantee_20bins"
+        )
+        print_artifact_summary(artifacts)
 
     return all_passed
 
@@ -399,6 +434,16 @@ def test_guaranteed_full_coverage():
     print("\nResults with linear function:")
     print(f"X-axis (AFHP) coverage: {x_coverage:.1f}%")
     print(f"Y-axis (return) coverage: {y_coverage:.1f}%")
+
+    # Generate test artifacts
+    if VISUALIZATION_AVAILABLE:
+        artifacts = save_test_artifacts(
+            samples=_samples,
+            sampler=sampler,
+            test_name="guaranteed_full_coverage_linear",
+            all_samples=all_samples
+        )
+        print_artifact_summary(artifacts)
 
     return x_coverage == 100.0 and y_coverage == 100.0
 
