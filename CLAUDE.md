@@ -110,9 +110,21 @@ twine upload dist/*
 ### Configuration Options
 - `num_bins`: Number of primary axis bins (affects coverage granularity)
 - `return_bins`: Number of secondary axis bins (0 = disable Phase 2)
-- `max_additional_evals`: Budget for secondary axis refinement
+- `max_additional_evals`: Budget for secondary axis refinement (ignored in unbounded mode)
+- `unbounded_mode`: Removes evaluation limits for theoretical convergence guarantees
 - `input_range`/`output_range`: Expected value ranges for proper binning
 - `input_to_threshold`: Optional transformation function for input values
+
+### Unbounded Mode
+When `unbounded_mode=True`, the algorithm removes evaluation limits and continues until all bins are filled or no progress can be made:
+
+- **Theoretical Guarantees**: Provides convergence guarantees for monotonic functions
+- **Practical Safety**: Includes convergence detection and safety limits (max 10,000 evaluations)
+- **Enhanced Coverage**: Achieves better coverage than bounded mode in most cases
+- **Smart Termination**: Stops after consecutive failures or precision limits are reached
+- **Use Cases**: Recommended for critical applications where maximum coverage is required
+
+**Performance Trade-off**: Unbounded mode may use more evaluations but guarantees theoretical convergence.
 
 ## Testing Strategy
 
@@ -128,6 +140,8 @@ The test suite verifies:
 - `test_coverage_with_different_parameters()`: Parameter robustness
 - `test_afhp_coverage_guarantee()`: Primary axis guarantee verification
 - `test_guaranteed_full_coverage()`: Linear function coverage test
+- `test_unbounded_mode()`: Unbounded vs bounded mode comparison
+- `test_unbounded_mode_convergence()`: Convergence with pathological functions
 
 ## Usage Patterns
 
@@ -165,6 +179,19 @@ sampler = BinarySearchSampler(
     num_bins=20,
     input_to_threshold=percentile_to_threshold
 )
+```
+
+### Unbounded Mode Usage (Maximum Coverage)
+```python
+sampler = BinarySearchSampler(
+    eval_func,
+    num_bins=15,
+    return_bins=10,
+    unbounded_mode=True,  # Removes evaluation limits for convergence
+    verbose=True
+)
+samples = sampler.run_with_return_refinement()
+# Achieves theoretical convergence guarantees with safety mechanisms
 ```
 
 ## Common Development Tasks
