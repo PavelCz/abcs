@@ -29,13 +29,16 @@ pip install -e ".[examples]"
 ### Code Quality
 ```bash
 # Format code
-black src/ tests/ examples/
+ruff format src/ tests/ examples/
 
 # Lint code
 ruff check src/ tests/ examples/
 
 # Type check
-mypy src/
+pytype src/abcs/*.py
+
+# Run all quality checks at once
+ci/format_and_check.sh
 
 # Run all tests
 python -m pytest tests/
@@ -202,9 +205,8 @@ sampler = BinarySearchSampler(
 
 ### Development Dependencies
 - `pytest>=7.0`: Testing framework
-- `black>=22.0`: Code formatting
-- `ruff>=0.1.0`: Fast Python linter
-- `mypy>=1.0`: Static type checking
+- `ruff>=0.1.0`: Fast Python linter and formatter
+- `pytype>=2023.04.11`: Google's static type checker
 
 ### Example Dependencies
 - `matplotlib>=3.5.0`: For visualization examples
@@ -212,9 +214,9 @@ sampler = BinarySearchSampler(
 ## Contributing Guidelines
 
 ### Code Style
-- Use Black for formatting with line length 88
+- Use ruff for formatting and linting (replaces black and flake8)
 - Follow PEP 8 naming conventions
-- Add type hints for all public functions
+- Add type hints for all public functions (checked with pytype)
 - Include docstrings for all public APIs
 
 ### Testing Requirements

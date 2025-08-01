@@ -1,7 +1,7 @@
 """
 ABCS - Adaptive Binary Coverage Search
 
-A Python library for efficient sampling of monotonic curves using adaptive 
+A Python library for efficient sampling of monotonic curves using adaptive
 binary search with coverage guarantees.
 """
 

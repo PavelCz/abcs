@@ -36,7 +36,7 @@ dev = [
     "pytest-cov>=4.0",
     "black>=22.0",
     "ruff>=0.1.0",
-    "mypy>=1.0",
+    "pytype>=2023.04.11",
 ]
 examples = [
     "matplotlib>=3.5.0",
@@ -54,8 +54,7 @@ where = ["src"]
 line-length = 88
 target-version = "py38"
 
-[tool.mypy]
+[tool.pytype]
 python_version = "3.8"
-warn_return_any = true
-warn_unused_configs = true
-ignore_missing_imports = true
+inputs = ["src/abcs"]
+exclude = ["src/abcs/__pycache__"]

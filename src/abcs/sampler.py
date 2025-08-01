@@ -1,7 +1,7 @@
 """
 Adaptive Binary Coverage Search (ABCS) algorithm for efficient monotonic curve sampling.
 
-This module provides a generic implementation of the ABCS algorithm used for 
+This module provides a generic implementation of the ABCS algorithm used for
 efficiently sampling points along monotonic curves with coverage guarantees.
 """
 
