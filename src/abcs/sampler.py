@@ -369,7 +369,7 @@ class BinarySearchSampler:
         # Set max_iterations based on mode
         if max_iterations is None:
             if self.unbounded_mode:
-                max_iterations = 100  # Much higher limit for unbounded mode
+                max_iterations = float('inf')  # Truly unbounded - only safety checks limit
             else:
                 max_iterations = 10  # Default for bounded mode
 
@@ -409,7 +409,12 @@ class BinarySearchSampler:
         left_input = lower_sample.input_value
         right_input = upper_sample.input_value
 
-        for _ in range(max_iterations):
+        iteration_count = 0
+        while True:
+            # Check iteration limit for bounded mode
+            if not self.unbounded_mode and iteration_count >= max_iterations:
+                break
+                
             # Safety check for unbounded mode
             if self.unbounded_mode and self.total_evals >= self.max_total_evals_unbounded:
                 if self.verbose:
@@ -438,10 +443,12 @@ class BinarySearchSampler:
             else:
                 right_input = middle_input
 
-            # Stop if search space is too small
+            # Stop if search space is too small (convergence based on precision)
             precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
             if abs(right_input - left_input) < precision_threshold:
                 break
+                
+            iteration_count += 1
 
         return None
 

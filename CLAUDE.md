@@ -116,12 +116,13 @@ twine upload dist/*
 - `input_to_threshold`: Optional transformation function for input values
 
 ### Unbounded Mode
-When `unbounded_mode=True`, the algorithm removes evaluation limits and continues until all bins are filled or no progress can be made:
+When `unbounded_mode=True`, the algorithm removes iteration limits and continues until all bins are filled or no progress can be made:
 
+- **Truly Unbounded**: No artificial iteration limits - only precision-based convergence detection
 - **Theoretical Guarantees**: Provides convergence guarantees for monotonic functions
-- **Practical Safety**: Includes convergence detection and safety limits (max 10,000 evaluations)
+- **Practical Safety**: Includes safety limit (max 10,000 total evaluations) to prevent infinite execution
 - **Enhanced Coverage**: Achieves better coverage than bounded mode in most cases
-- **Smart Termination**: Stops after consecutive failures or precision limits are reached
+- **Smart Termination**: Stops when precision threshold reached or consecutive failures detected
 - **Use Cases**: Recommended for critical applications where maximum coverage is required
 
 **Performance Trade-off**: Unbounded mode may use more evaluations but guarantees theoretical convergence.
