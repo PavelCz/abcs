@@ -245,6 +245,39 @@ class BinarySearchSampler:
         raise ValueError(
             f"Could not extract return value from sample metadata: {metadata}"
         )
+    
+    def identify_return_gap_intervals(
+        self, filled_return_bins: set, return_bin_edges: NDArray[np.float64]
+    ) -> List[Tuple[int, int]]:
+        """
+        Identify contiguous intervals of empty return bins.
+        
+        Args:
+            filled_return_bins: Set of bin indices that are already filled
+            return_bin_edges: Array of bin edge values
+            
+        Returns:
+            List of (start_bin, end_bin) tuples representing gap intervals
+        """
+        gap_intervals = []
+        current_gap_start = None
+        
+        for i in range(self.return_bins):
+            if i not in filled_return_bins:
+                # Start of a new gap
+                if current_gap_start is None:
+                    current_gap_start = i
+            else:
+                # End of a gap
+                if current_gap_start is not None:
+                    gap_intervals.append((current_gap_start, i - 1))
+                    current_gap_start = None
+        
+        # Handle gap that extends to the end
+        if current_gap_start is not None:
+            gap_intervals.append((current_gap_start, self.return_bins - 1))
+        
+        return gap_intervals
 
     def fill_return_gaps(
         self, initial_samples: List[Optional[SamplePoint]]
