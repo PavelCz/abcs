@@ -37,6 +37,7 @@ dev = [
     "black>=22.0",
     "ruff>=0.1.0",
     "pytype>=2023.04.11",
+    "matplotlib>=3.5.0",
 ]
 examples = [
     "matplotlib>=3.5.0",
