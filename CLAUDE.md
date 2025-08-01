@@ -6,6 +6,8 @@ This file provides guidance to Claude Code when working with the ABCS (Adaptive 
 
 ABCS is a Python library that implements the Adaptive Binary Coverage Search algorithm for efficient sampling of monotonic curves. The algorithm uses a two-phase approach to ensure comprehensive coverage across both primary and secondary output dimensions with minimal evaluations.
 
+**Python Version**: Requires Python 3.8 or higher.
+
 ### Core Algorithm
 
 The algorithm operates in two phases:
@@ -34,8 +36,8 @@ ruff format src/ tests/ examples/
 # Lint code
 ruff check src/ tests/ examples/
 
-# Type check
-pytype src/abcs/*.py
+# Type check (suppress verbose output like CI does)
+pytype src/abcs/*.py --verbosity=0 2>/dev/null
 
 # Run all quality checks at once
 ci/format_and_check.sh
@@ -205,7 +207,8 @@ sampler = BinarySearchSampler(
 
 ### Development Dependencies
 - `pytest>=7.0`: Testing framework
-- `ruff>=0.1.0`: Fast Python linter and formatter
+- `pytest-cov>=4.0`: Coverage reporting
+- `ruff>=0.1.0`: Fast Python linter and formatter (replaces black + flake8)
 - `pytype>=2023.04.11`: Google's static type checker
 
 ### Example Dependencies
