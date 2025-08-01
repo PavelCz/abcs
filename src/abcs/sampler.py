@@ -62,6 +62,9 @@ class BinarySearchSampler:
         self.return_bins = return_bins
         self.max_additional_evals = max_additional_evals
         self.unbounded_mode = unbounded_mode
+        
+        # Safety limit for unbounded mode (prevent infinite loops)
+        self.max_total_evals_unbounded = 10000
 
         # Initialize bins
         self.bin_edges: NDArray[np.float64] = np.linspace(
@@ -311,6 +314,11 @@ class BinarySearchSampler:
         # Fill empty return bins using binary search
         additional_samples = []
         evals_used = 0
+        
+        # Track progress for convergence detection in unbounded mode
+        initial_empty_bins = len(empty_return_bins)
+        consecutive_failures = 0
+        max_consecutive_failures = 3  # Stop after 3 consecutive failures
 
         for bin_idx, target_return, return_min, return_max in empty_return_bins:
             # Skip evaluation limit check in unbounded mode
@@ -324,6 +332,13 @@ class BinarySearchSampler:
                 additional_samples.append(sample)
                 self.return_refinement_samples.append(sample)
                 evals_used += 1
+                consecutive_failures = 0  # Reset failure counter on success
+            else:
+                consecutive_failures += 1
+                if self.unbounded_mode and consecutive_failures >= max_consecutive_failures:
+                    if self.verbose:
+                        print(f"Stopping after {consecutive_failures} consecutive failures to find return samples")
+                    break
 
         if self.verbose and additional_samples:
             print(f"Added {len(additional_samples)} samples for return gap filling")
@@ -395,6 +410,12 @@ class BinarySearchSampler:
         right_input = upper_sample.input_value
 
         for _ in range(max_iterations):
+            # Safety check for unbounded mode
+            if self.unbounded_mode and self.total_evals >= self.max_total_evals_unbounded:
+                if self.verbose:
+                    print(f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations")
+                break
+                
             # Calculate middle input value
             middle_input = (left_input + right_input) / 2
 
@@ -418,7 +439,8 @@ class BinarySearchSampler:
                 right_input = middle_input
 
             # Stop if search space is too small
-            if abs(right_input - left_input) < 1e-6:
+            precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
+            if abs(right_input - left_input) < precision_threshold:
                 break
 
         return None
