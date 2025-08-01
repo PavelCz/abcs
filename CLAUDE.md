@@ -257,3 +257,7 @@ This library is designed to be:
 - **Minimal dependencies**: Only requires NumPy for core functionality
 - **Extensible**: Easy to add domain-specific wrapper functions
 - **Testable**: Comprehensive test suite ensures reliability
+
+## Development Best Practices
+
+- Always commit changes in small atomic commits
