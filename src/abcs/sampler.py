@@ -278,6 +278,129 @@ class BinarySearchSampler:
             gap_intervals.append((current_gap_start, self.return_bins - 1))
         
         return gap_intervals
+    
+    def determine_return_bin(self, return_value: float, return_bin_edges: NDArray[np.float64]) -> int:
+        """
+        Determine which return bin a value falls into.
+        
+        Args:
+            return_value: The return value to bin
+            return_bin_edges: Array of bin edge values
+            
+        Returns:
+            Bin index (0 to return_bins-1)
+        """
+        min_return = return_bin_edges[0]
+        max_return = return_bin_edges[-1]
+        
+        # Handle edge cases
+        if return_value <= min_return:
+            return 0
+        if return_value >= max_return:
+            return self.return_bins - 1
+            
+        # Find the appropriate bin
+        for i in range(len(return_bin_edges) - 1):
+            if return_bin_edges[i] <= return_value < return_bin_edges[i + 1]:
+                return i
+                
+        # This should not happen, but default to last bin
+        return self.return_bins - 1
+    
+    def return_bins_remaining(self, left_bin_idx: int, right_bin_idx: int, filled_return_bins: set) -> bool:
+        """
+        Check if there are empty return bins in the given range.
+        
+        Args:
+            left_bin_idx: Left boundary bin index (inclusive)
+            right_bin_idx: Right boundary bin index (inclusive)
+            filled_return_bins: Set of already filled bin indices
+            
+        Returns:
+            True if there are empty bins in the range
+        """
+        for i in range(left_bin_idx, right_bin_idx + 1):
+            if i not in filled_return_bins:
+                return True
+        return False
+    
+    def binary_search_return_gaps(
+        self,
+        left_sample: SamplePoint,
+        right_sample: SamplePoint,
+        left_return_bin: int,
+        right_return_bin: int,
+        filled_return_bins: set,
+        return_bin_edges: NDArray[np.float64],
+        additional_samples: List[SamplePoint],
+        iteration_count: int = 0,
+    ) -> int:
+        """
+        Recursively fill return bins using binary search.
+        
+        Args:
+            left_sample: Sample with lower return value
+            right_sample: Sample with higher return value
+            left_return_bin: Left boundary return bin
+            right_return_bin: Right boundary return bin
+            filled_return_bins: Set of already filled bin indices
+            return_bin_edges: Array of return bin edges
+            additional_samples: List to append new samples to
+            iteration_count: Current iteration count for safety checks
+            
+        Returns:
+            Number of evaluations performed
+        """
+        # Safety checks
+        if self.unbounded_mode and self.total_evals >= self.max_total_evals_unbounded:
+            if self.verbose:
+                print(f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations")
+            return 0
+            
+        if not self.unbounded_mode and iteration_count >= self.max_additional_evals:
+            return 0
+            
+        # Check precision threshold
+        precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
+        if abs(right_sample.input_value - left_sample.input_value) < precision_threshold:
+            return 0
+        
+        # Calculate middle input value
+        middle_input = (left_sample.input_value + right_sample.input_value) / 2
+        
+        # Evaluate at middle point
+        middle_sample = self.evaluate_at_input(middle_input)
+        evals = 1
+        
+        try:
+            middle_return = self.extract_return_value(middle_sample)
+        except ValueError:
+            # Can't extract return value, skip this sample
+            return evals
+            
+        # Determine which bin this return falls into
+        middle_bin = self.determine_return_bin(middle_return, return_bin_edges)
+        
+        # Add sample to the filled bins set
+        if middle_bin not in filled_return_bins:
+            filled_return_bins.add(middle_bin)
+            additional_samples.append(middle_sample)
+            self.return_refinement_samples.append(middle_sample)
+        
+        # Recursively search left and right if bins remain
+        if self.return_bins_remaining(left_return_bin, middle_bin, filled_return_bins):
+            evals += self.binary_search_return_gaps(
+                left_sample, middle_sample, left_return_bin, middle_bin,
+                filled_return_bins, return_bin_edges, additional_samples, iteration_count + evals
+            )
+            
+        if self.return_bins_remaining(middle_bin, right_return_bin, filled_return_bins):
+            evals += self.binary_search_return_gaps(
+                middle_sample, right_sample, middle_bin, right_return_bin,
+                filled_return_bins, return_bin_edges, additional_samples, iteration_count + evals
+            )
+            
+        return evals
 
     def fill_return_gaps(
         self, initial_samples: List[Optional[SamplePoint]]
