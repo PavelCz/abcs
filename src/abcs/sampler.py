@@ -305,14 +305,16 @@ class BinarySearchSampler:
                 )
 
         if self.verbose and empty_return_bins:
-            print(f"Found {len(empty_return_bins)} empty return bins to fill")
+            mode_text = "unbounded mode" if self.unbounded_mode else f"max {self.max_additional_evals} evals"
+            print(f"Found {len(empty_return_bins)} empty return bins to fill ({mode_text})")
 
         # Fill empty return bins using binary search
         additional_samples = []
         evals_used = 0
 
         for bin_idx, target_return, return_min, return_max in empty_return_bins:
-            if evals_used >= self.max_additional_evals:
+            # Skip evaluation limit check in unbounded mode
+            if not self.unbounded_mode and evals_used >= self.max_additional_evals:
                 break
 
             sample = self.search_for_return_range(
