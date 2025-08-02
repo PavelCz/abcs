@@ -18,8 +18,13 @@ class BinarySearchSampler:
 
     This sampler efficiently fills bins along the output axis by using
     binary search in the input space. It operates in two phases:
-    1. Phase 1: AFHP coverage via binary search
-    2. Phase 2: Return value refinement (optional)
+    1. Phase 1: AFHP coverage via recursive binary search
+    2. Phase 2: Return value gap filling via recursive binary bisection (optional)
+    
+    Phase 2 uses a systematic approach to fill gaps in return value coverage:
+    - Identifies contiguous intervals of empty return bins
+    - Applies recursive binary search within each gap interval
+    - Ensures comprehensive coverage across both primary and secondary dimensions
     """
 
     def __init__(
@@ -407,6 +412,15 @@ class BinarySearchSampler:
     ) -> List[SamplePoint]:
         """
         Fill gaps in return values using recursive binary search (Phase 2).
+        
+        This method implements the improved Phase 2 algorithm that uses recursive
+        binary bisection to systematically fill gaps in return value coverage.
+        Unlike the previous interpolation-based approach, this method:
+        
+        1. Identifies contiguous intervals of empty return bins
+        2. Finds samples that bracket each gap interval
+        3. Applies recursive binary search within each interval
+        4. Continues until all gaps are filled or convergence is reached
 
         Args:
             initial_samples: Samples from the initial AFHP-based binary search

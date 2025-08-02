@@ -11,8 +11,8 @@ ABCS is a Python library that implements the Adaptive Binary Coverage Search alg
 ### Core Algorithm
 
 The algorithm operates in two phases:
-1. **Phase 1: Primary Coverage** - Uses binary search to fill bins along the primary output axis (e.g., AFHP)
-2. **Phase 2: Secondary Refinement** - Optionally fills gaps along secondary output axis (e.g., return values)
+1. **Phase 1: Primary Coverage** - Uses recursive binary search to fill bins along the primary output axis (e.g., AFHP)
+2. **Phase 2: Return Gap Filling** - Uses recursive binary bisection to systematically fill gaps along secondary output axis (e.g., return values)
 
 ## Key Commands
 
@@ -99,8 +99,19 @@ twine upload dist/*
 
 ### Algorithm Guarantees
 - **Primary Coverage**: Guarantees 100% bin coverage when evaluation function spans the full output range
-- **Secondary Coverage**: Best-effort coverage based on available evaluation budget
+- **Secondary Coverage**: Uses recursive binary bisection for systematic gap filling
 - **Monotonicity**: Assumes monotonic relationship between input and primary output
+
+### Phase 2 Binary Bisection Algorithm
+The improved Phase 2 implementation uses a systematic approach:
+
+1. **Gap Identification**: Identifies contiguous intervals of empty return bins
+2. **Bracket Finding**: Locates samples that bracket each gap interval
+3. **Recursive Bisection**: Applies binary search within each gap interval
+4. **Convergence Detection**: Stops when precision thresholds are reached or evaluation limits hit
+5. **Safety Mechanisms**: Includes iteration limits and precision-based termination
+
+This approach ensures more reliable and comprehensive return value coverage compared to the previous interpolation-based method.
 
 ### Performance Characteristics
 - **Time Complexity**: O(n log n) for n primary bins + O(m) for m secondary bins
