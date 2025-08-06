@@ -92,9 +92,9 @@ def test_full_coverage():
     """
     Test that the binary search sampler achieves 100% coverage on both axes.
 
-    This test uses parameters that should guarantee 100% coverage:
+    This test uses unbounded mode to guarantee 100% coverage:
     - The AFHP axis uses binary search which guarantees filling all bins
-    - The return axis is given sufficient evaluation budget to fill all bins
+    - The return axis uses unbounded mode to continue until convergence
     """
     print("Testing full coverage on both x-axis (AFHP) and y-axis (return)...")
     print("=" * 60)
@@ -106,15 +106,14 @@ def test_full_coverage():
     num_bins = 10  # Number of AFHP bins
     return_bins = 8  # Number of return bins
 
-    # Create sampler with return refinement enabled
-    # Set max_additional_evals high enough to guarantee all return bins can be filled
+    # Create sampler with return refinement enabled in unbounded mode
     sampler = BinarySearchSampler(
         eval_function=eval_function,
         num_bins=num_bins,
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         return_bins=return_bins,
-        max_additional_evals=return_bins * 2,  # Sufficient budget for all return bins
+        unbounded_mode=True,  # Use unbounded mode for guaranteed convergence
         verbose=True,
     )
 
