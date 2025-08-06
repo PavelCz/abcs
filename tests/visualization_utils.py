@@ -27,14 +27,57 @@ from abcs.types import SamplePoint
 _CURRENT_TEST_RUN_TIMESTAMP = None
 
 
+def _cleanup_old_artifact_folders(max_folders: int = 5) -> None:
+    """
+    Remove old timestamped artifact folders, keeping only the most recent ones.
+    
+    Args:
+        max_folders: Maximum number of timestamped folders to keep (default: 5)
+    """
+    artifacts_root = Path("test_artifacts")
+    if not artifacts_root.exists():
+        return
+    
+    # Get all timestamped directories (matching YYYYMMDD_HHMMSS pattern)
+    timestamped_dirs = []
+    for item in artifacts_root.iterdir():
+        if item.is_dir() and len(item.name) == 15 and '_' in item.name:
+            # Check if it matches the timestamp pattern
+            try:
+                datetime.datetime.strptime(item.name, "%Y%m%d_%H%M%S")
+                timestamped_dirs.append(item)
+            except ValueError:
+                # Skip directories that don't match the timestamp pattern
+                continue
+    
+    # Sort by name (which sorts chronologically due to timestamp format)
+    timestamped_dirs.sort(key=lambda x: x.name)
+    
+    # Remove old directories if we have more than max_folders
+    if len(timestamped_dirs) >= max_folders:
+        folders_to_remove = timestamped_dirs[:-max_folders + 1]  # Keep space for the new one
+        for old_folder in folders_to_remove:
+            try:
+                import shutil
+                shutil.rmtree(old_folder)
+                print(f"🗑️ Removed old test artifacts: {old_folder.name}")
+            except Exception as e:
+                print(f"⚠️ Warning: Could not remove old folder {old_folder.name}: {e}")
+
+
 def initialize_test_run() -> str:
     """
     Initialize a new test run with a timestamp.
+    Automatically cleans up old test run folders to keep only the 5 most recent.
     
     Returns:
         The timestamp string for the test run
     """
     global _CURRENT_TEST_RUN_TIMESTAMP
+    
+    # Clean up old artifact folders before creating a new one
+    _cleanup_old_artifact_folders(max_folders=5)
+    
     _CURRENT_TEST_RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Create the main test run directory
