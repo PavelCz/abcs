@@ -151,6 +151,39 @@ class BinarySearchSampler:
     def bins_remaining(self, left_idx: int, right_idx: int) -> bool:
         """Check if there are empty bins in the given range."""
         return self._bins_remaining_generic(left_idx, right_idx, self.bin_samples, exclusive=True)
+    
+    def _check_convergence(
+        self, left_value: float, right_value: float, iteration_count: int
+    ) -> bool:
+        """
+        Check if binary search should terminate based on convergence criteria.
+        
+        Args:
+            left_value: Left boundary value
+            right_value: Right boundary value
+            iteration_count: Current iteration count
+            
+        Returns:
+            True if search should terminate
+        """
+        # Check iteration limits
+        if self.unbounded_mode:
+            # In unbounded mode, check safety limit
+            if self.total_evals >= self.max_total_evals_unbounded:
+                if self.verbose:
+                    print(f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations")
+                return True
+        else:
+            # In bounded mode, check iteration limit
+            if iteration_count >= self.max_additional_evals:
+                return True
+        
+        # Check precision threshold
+        precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
+        if abs(right_value - left_value) < precision_threshold:
+            return True
+            
+        return False
 
     def evaluate_at_input(self, input_value: float) -> SamplePoint:
         """Evaluate the function at the given input value."""
@@ -384,18 +417,8 @@ class BinarySearchSampler:
         Returns:
             Number of evaluations performed
         """
-        # Safety checks
-        if self.unbounded_mode and self.total_evals >= self.max_total_evals_unbounded:
-            if self.verbose:
-                print(f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations")
-            return 0
-            
-        if not self.unbounded_mode and iteration_count >= self.max_additional_evals:
-            return 0
-            
-        # Check precision threshold
-        precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
-        if abs(right_sample.input_value - left_sample.input_value) < precision_threshold:
+        # Check convergence criteria
+        if self._check_convergence(left_sample.input_value, right_sample.input_value, iteration_count):
             return 0
         
         # Calculate middle input value
@@ -623,17 +646,7 @@ class BinarySearchSampler:
         right_input = upper_sample.input_value
 
         iteration_count = 0
-        while True:
-            # Check iteration limit for bounded mode
-            if not self.unbounded_mode and iteration_count >= max_iterations:
-                break
-                
-            # Safety check for unbounded mode
-            if self.unbounded_mode and self.total_evals >= self.max_total_evals_unbounded:
-                if self.verbose:
-                    print(f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations")
-                break
-                
+        while not self._check_convergence(left_input, right_input, iteration_count):
             # Calculate middle input value
             middle_input = (left_input + right_input) / 2
 
@@ -655,11 +668,6 @@ class BinarySearchSampler:
                 left_input = middle_input
             else:
                 right_input = middle_input
-
-            # Stop if search space is too small (convergence based on precision)
-            precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
-            if abs(right_input - left_input) < precision_threshold:
-                break
                 
             iteration_count += 1
 
