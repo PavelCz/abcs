@@ -23,15 +23,27 @@ except ImportError:
 from abcs.types import SamplePoint
 
 
-def create_test_artifacts_dir() -> Path:
+def create_test_artifacts_dir(timestamp: Optional[str] = None) -> Path:
     """
-    Create the test_artifacts directory if it doesn't exist.
+    Create a timestamped test_artifacts subdirectory if it doesn't exist.
+    
+    Args:
+        timestamp: Optional timestamp string (if None, current time is used)
     
     Returns:
-        Path to the test_artifacts directory
+        Path to the timestamped test_artifacts subdirectory
     """
-    artifacts_dir = Path("test_artifacts")
+    if timestamp is None:
+        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    
+    # Create main test_artifacts directory
+    main_dir = Path("test_artifacts")
+    main_dir.mkdir(exist_ok=True)
+    
+    # Create timestamped subdirectory
+    artifacts_dir = main_dir / timestamp
     artifacts_dir.mkdir(exist_ok=True)
+    
     return artifacts_dir
 
 
@@ -101,8 +113,8 @@ def plot_threshold_to_afhp_mapping(
              bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
     
     # Save the plot
-    artifacts_dir = create_test_artifacts_dir()
-    filename = f"threshold_to_afhp_{test_name}_{timestamp}.png"
+    artifacts_dir = create_test_artifacts_dir(timestamp)
+    filename = f"threshold_to_afhp_{test_name}.png"
     filepath = artifacts_dir / filename
     
     plt.tight_layout()
@@ -186,8 +198,8 @@ def plot_afhp_to_return_mapping(
              bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
     
     # Save the plot
-    artifacts_dir = create_test_artifacts_dir()
-    filename = f"afhp_to_return_{test_name}_{timestamp}.png"
+    artifacts_dir = create_test_artifacts_dir(timestamp)
+    filename = f"afhp_to_return_{test_name}.png"
     filepath = artifacts_dir / filename
     
     plt.tight_layout()
@@ -218,7 +230,7 @@ def save_test_artifacts(
     """
     if not MATPLOTLIB_AVAILABLE:
         print("Warning: matplotlib not available, skipping all test artifacts")
-        return {"threshold_to_afhp": None, "afhp_to_return": None}
+        return {"threshold_to_afhp": None, "afhp_to_return": None, "directory": None}
     
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
@@ -235,9 +247,52 @@ def save_test_artifacts(
         plot_samples, sampler, test_name, timestamp
     )
     
+    # Create a summary file in the timestamped directory
+    artifacts_dir = create_test_artifacts_dir(timestamp)
+    summary_file = artifacts_dir / "test_summary.txt"
+    
+    with open(summary_file, 'w') as f:
+        f.write(f"Test Name: {test_name}\n")
+        f.write(f"Timestamp: {timestamp}\n")
+        f.write(f"Number of samples: {len(plot_samples) if plot_samples else 0}\n")
+        
+        # Get coverage summary
+        summary = sampler.get_coverage_summary()
+        f.write(f"AFHP Coverage: {summary['coverage_percentage']:.1f}%\n")
+        f.write(f"Total Evaluations: {summary['total_evaluations']}\n")
+        f.write(f"Bins Filled: {summary['bins_filled']}/{sampler.num_bins}\n")
+        
+        if sampler.return_bins > 0:
+            # Calculate return coverage if applicable
+            returns = []
+            for sample in (all_samples or samples):
+                if sample is not None:
+                    try:
+                        ret = sampler.extract_return_value(sample)
+                        returns.append(ret)
+                    except ValueError:
+                        pass
+            
+            if returns:
+                min_return = min(returns)
+                max_return = max(returns)
+                if max_return > min_return:
+                    filled_return_bins = set()
+                    for ret in returns:
+                        bin_idx = int((ret - min_return) / (max_return - min_return) * sampler.return_bins)
+                        if bin_idx >= sampler.return_bins:
+                            bin_idx = sampler.return_bins - 1
+                        filled_return_bins.add(bin_idx)
+                    return_coverage = 100.0 * len(filled_return_bins) / sampler.return_bins
+                    f.write(f"Return Coverage: {return_coverage:.1f}%\n")
+                    f.write(f"Return Bins Filled: {len(filled_return_bins)}/{sampler.return_bins}\n")
+    
+    print(f"Test artifacts saved in: {artifacts_dir}")
+    
     return {
         "threshold_to_afhp": threshold_plot,
-        "afhp_to_return": return_plot
+        "afhp_to_return": return_plot,
+        "directory": artifacts_dir
     }
 
 
@@ -248,9 +303,13 @@ def print_artifact_summary(artifacts: Dict[str, Optional[Path]]) -> None:
     Args:
         artifacts: Dictionary from save_test_artifacts
     """
-    print("\nTest artifacts generated:")
-    for artifact_type, filepath in artifacts.items():
-        if filepath:
-            print(f"  - {artifact_type}: {filepath}")
-        else:
-            print(f"  - {artifact_type}: Not generated (matplotlib unavailable)")
+    if artifacts.get("directory"):
+        print(f"\nTest artifacts saved in timestamped directory: {artifacts['directory']}")
+    else:
+        print("\nTest artifacts generated:")
+        for artifact_type, filepath in artifacts.items():
+            if artifact_type != "directory":  # Skip the directory entry
+                if filepath:
+                    print(f"  - {artifact_type}: {filepath}")
+                else:
+                    print(f"  - {artifact_type}: Not generated (matplotlib unavailable)")
