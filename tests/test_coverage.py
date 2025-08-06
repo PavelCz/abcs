@@ -198,18 +198,17 @@ def test_full_coverage():
         if not y_axis_pass:
             print(f"  - Y-axis coverage: {y_axis_coverage:.1f}% (expected 100%)")
 
-    # Generate test artifacts
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=samples,
-            sampler=sampler,
-            test_name="full_coverage",
-            all_samples=all_samples
-        )
-        print_artifact_summary(artifacts)
-    else:
-        print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
-        print("   To generate test artifacts, install matplotlib: pip install matplotlib")
+    # Generate test artifacts - required for test validation
+    if not VISUALIZATION_AVAILABLE:
+        raise ImportError("Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib")
+    
+    artifacts = save_test_artifacts(
+        samples=samples,
+        sampler=sampler,
+        test_name="full_coverage",
+        all_samples=all_samples
+    )
+    print_artifact_summary(artifacts)
     
     # Return test result
     return x_axis_pass and y_axis_pass
@@ -361,18 +360,17 @@ def test_afhp_coverage_guarantee():
             if gaps:
                 print(f"  Missing bins: {gaps}")
 
-    # Generate test artifacts for the most comprehensive test
+    # Generate test artifacts for the most comprehensive test - required for validation
     if largest_test_samples and largest_test_sampler:
-        if VISUALIZATION_AVAILABLE:
-            artifacts = save_test_artifacts(
-                samples=largest_test_samples,
-                sampler=largest_test_sampler,
-                test_name="afhp_coverage_guarantee_20bins"
-            )
-            print_artifact_summary(artifacts)
-        else:
-            print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
-            print("   To generate test artifacts, install matplotlib: pip install matplotlib")
+        if not VISUALIZATION_AVAILABLE:
+            raise ImportError("Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib")
+            
+        artifacts = save_test_artifacts(
+            samples=largest_test_samples,
+            sampler=largest_test_sampler,
+            test_name="afhp_coverage_guarantee_20bins"
+        )
+        print_artifact_summary(artifacts)
 
     return all_passed
 
@@ -441,18 +439,17 @@ def test_guaranteed_full_coverage():
     print(f"X-axis (AFHP) coverage: {x_coverage:.1f}%")
     print(f"Y-axis (return) coverage: {y_coverage:.1f}%")
 
-    # Generate test artifacts
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=_samples,
-            sampler=sampler,
-            test_name="guaranteed_full_coverage_linear",
-            all_samples=all_samples
-        )
-        print_artifact_summary(artifacts)
-    else:
-        print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
-        print("   To generate test artifacts, install matplotlib: pip install matplotlib")
+    # Generate test artifacts - required for test validation
+    if not VISUALIZATION_AVAILABLE:
+        raise ImportError("Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib")
+    
+    artifacts = save_test_artifacts(
+        samples=_samples,
+        sampler=sampler,
+        test_name="guaranteed_full_coverage_linear",
+        all_samples=all_samples
+    )
+    print_artifact_summary(artifacts)
 
     return x_coverage == 100.0 and y_coverage == 100.0
 
@@ -607,18 +604,17 @@ def test_phase2_binary_bisection():
     print(f"  - Added return samples: {'PASS' if phase2_worked else 'FAIL'}")
     print(f"  - Achieved full return coverage: {'PASS' if full_coverage else 'FAIL'}")
     
-    # Generate test artifacts for this specific test
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=afhp_samples,
-            sampler=sampler,
-            test_name="phase2_binary_bisection",
-            all_samples=all_samples
-        )
-        print_artifact_summary(artifacts)
-    else:
-        print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
-        print("   To generate test artifacts, install matplotlib: pip install matplotlib")
+    # Generate test artifacts - required for test validation
+    if not VISUALIZATION_AVAILABLE:
+        raise ImportError("Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib")
+    
+    artifacts = save_test_artifacts(
+        samples=afhp_samples,
+        sampler=sampler,
+        test_name="phase2_binary_bisection",
+        all_samples=all_samples
+    )
+    print_artifact_summary(artifacts)
     
     return phase2_worked and full_coverage
 
