@@ -80,31 +80,77 @@ class BinarySearchSampler:
         self.return_refinement_samples: List[SamplePoint] = []
         self.total_evals: int = 0
 
+    def _determine_bin_generic(
+        self, value: float, bin_edges: NDArray[np.float64], num_bins: int
+    ) -> int:
+        """
+        Generic method to determine which bin a value falls into.
+        
+        Args:
+            value: The value to bin
+            bin_edges: Array of bin edge values
+            num_bins: Total number of bins
+            
+        Returns:
+            Bin index (0 to num_bins-1)
+        """
+        min_val = bin_edges[0]
+        max_val = bin_edges[-1]
+        
+        # Handle edge cases
+        if value <= min_val:
+            return 0
+        if value >= max_val:
+            return num_bins - 1
+            
+        # Find the appropriate bin
+        for i in range(len(bin_edges) - 1):
+            if bin_edges[i] <= value < bin_edges[i + 1]:
+                return i
+                
+        # This should not happen, but default to last bin
+        return num_bins - 1
+
     def determine_bin(self, output_value: float) -> int:
         """Determine which bin an output value falls into."""
         if output_value < self.output_range[0] or output_value > self.output_range[1]:
             raise ValueError(
                 f"Output value {output_value} outside range {self.output_range}"
             )
+        return self._determine_bin_generic(output_value, self.bin_edges, self.num_bins)
 
-        # Handle edge case where output equals max value
-        if output_value == self.output_range[1]:
-            return self.num_bins - 1
-
-        # Find the bin
-        for i in range(len(self.bin_edges) - 1):
-            if self.bin_edges[i] <= output_value < self.bin_edges[i + 1]:
-                return i
-
-        # This should not happen given the checks above
-        raise ValueError(f"Could not find bin for output value {output_value}")
+    def _bins_remaining_generic(
+        self, left_idx: int, right_idx: int, filled_bins: set, exclusive: bool = True
+    ) -> bool:
+        """
+        Generic method to check if there are empty bins in the given range.
+        
+        Args:
+            left_idx: Left boundary index
+            right_idx: Right boundary index  
+            filled_bins: Set of filled bin indices (or None-check for Phase 1)
+            exclusive: If True, exclude boundaries (Phase 1 style); if False, include (Phase 2 style)
+            
+        Returns:
+            True if there are empty bins in the range
+        """
+        start = left_idx + 1 if exclusive else left_idx
+        end = right_idx if exclusive else right_idx + 1
+        
+        for i in range(start, end):
+            if isinstance(filled_bins, set):
+                # Phase 2 style: check set membership
+                if i not in filled_bins:
+                    return True
+            else:
+                # Phase 1 style: check for None in list
+                if i < len(filled_bins) and filled_bins[i] is None:
+                    return True
+        return False
 
     def bins_remaining(self, left_idx: int, right_idx: int) -> bool:
         """Check if there are empty bins in the given range."""
-        for i in range(left_idx + 1, right_idx):
-            if self.bin_samples[i] is None:
-                return True
-        return False
+        return self._bins_remaining_generic(left_idx, right_idx, self.bin_samples, exclusive=True)
 
     def evaluate_at_input(self, input_value: float) -> SamplePoint:
         """Evaluate the function at the given input value."""
@@ -295,22 +341,7 @@ class BinarySearchSampler:
         Returns:
             Bin index (0 to return_bins-1)
         """
-        min_return = return_bin_edges[0]
-        max_return = return_bin_edges[-1]
-        
-        # Handle edge cases
-        if return_value <= min_return:
-            return 0
-        if return_value >= max_return:
-            return self.return_bins - 1
-            
-        # Find the appropriate bin
-        for i in range(len(return_bin_edges) - 1):
-            if return_bin_edges[i] <= return_value < return_bin_edges[i + 1]:
-                return i
-                
-        # This should not happen, but default to last bin
-        return self.return_bins - 1
+        return self._determine_bin_generic(return_value, return_bin_edges, self.return_bins)
     
     def return_bins_remaining(self, left_bin_idx: int, right_bin_idx: int, filled_return_bins: set) -> bool:
         """
@@ -324,10 +355,7 @@ class BinarySearchSampler:
         Returns:
             True if there are empty bins in the range
         """
-        for i in range(left_bin_idx, right_bin_idx + 1):
-            if i not in filled_return_bins:
-                return True
-        return False
+        return self._bins_remaining_generic(left_bin_idx, right_bin_idx, filled_return_bins, exclusive=False)
     
     def binary_search_return_gaps(
         self,
