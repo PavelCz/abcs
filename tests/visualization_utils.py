@@ -238,16 +238,17 @@ def plot_afhp_to_return_mapping(
     plt.title(f'AFHP to Return Value Mapping - {test_name}')
     plt.grid(True, alpha=0.3)
     
-    # Add legend if we have both types of samples
-    if phase1_afhp and phase2_afhp:
-        plt.legend()
-    
     # Calculate statistics from all samples
     all_afhp = phase1_afhp + phase2_afhp
     all_return = phase1_return + phase2_return
     min_afhp, max_afhp = min(all_afhp), max(all_afhp)
     min_return, max_return = min(all_return), max(all_return)
     
+    # Add legend in bottom right if we have both types of samples
+    if phase1_afhp and phase2_afhp:
+        plt.legend(loc='lower right')
+    
+    # Add statistics text box in top left (now without legend overlap)
     plt.text(0.02, 0.98, 
              f'Total: {total_samples} samples\n'
              f'Phase 1: {len(phase1_afhp)} | Phase 2: {len(phase2_afhp)}\n'
