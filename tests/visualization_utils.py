@@ -168,6 +168,7 @@ def plot_afhp_to_return_mapping(
 ) -> Optional[Path]:
     """
     Generate and save a plot showing the AFHP to return value mapping.
+    Uses different colors for Phase 1 vs Phase 2 samples.
     
     Args:
         samples: List of sample points from the algorithm
@@ -185,9 +186,15 @@ def plot_afhp_to_return_mapping(
         print("Warning: No samples provided, skipping AFHP-to-return plot")
         return None
     
-    # Extract AFHP and return values
-    afhp_values = []
-    return_values = []
+    # Get Phase 2 (return refinement) samples to distinguish them
+    phase2_samples = sampler.get_return_refinement_samples()
+    phase2_sample_ids = {id(sample) for sample in phase2_samples if sample is not None}
+    
+    # Separate Phase 1 and Phase 2 samples
+    phase1_afhp = []
+    phase1_return = []
+    phase2_afhp = []
+    phase2_return = []
     
     for sample in samples:
         if sample is not None:
@@ -198,30 +205,52 @@ def plot_afhp_to_return_mapping(
                 # Get return value using the sampler's method
                 return_val = sampler.extract_return_value(sample)
                 
-                afhp_values.append(afhp)
-                return_values.append(return_val)
+                # Determine if this is a Phase 1 or Phase 2 sample
+                if id(sample) in phase2_sample_ids:
+                    phase2_afhp.append(afhp)
+                    phase2_return.append(return_val)
+                else:
+                    phase1_afhp.append(afhp)
+                    phase1_return.append(return_val)
+                    
             except (ValueError, AttributeError):
                 # Skip samples where return value cannot be extracted
                 continue
     
-    if not afhp_values:
+    total_samples = len(phase1_afhp) + len(phase2_afhp)
+    if total_samples == 0:
         print("Warning: No valid AFHP-return pairs found, skipping AFHP-to-return plot")
         return None
     
     # Create the plot
     plt.figure(figsize=(10, 6))
-    plt.scatter(afhp_values, return_values, alpha=0.7, s=50, c='orange')
+    
+    # Plot Phase 1 samples (primary coverage)
+    if phase1_afhp:
+        plt.scatter(phase1_afhp, phase1_return, alpha=0.7, s=50, c='orange', label=f'Phase 1 ({len(phase1_afhp)} samples)')
+    
+    # Plot Phase 2 samples (return gap filling) 
+    if phase2_afhp:
+        plt.scatter(phase2_afhp, phase2_return, alpha=0.7, s=50, c='red', label=f'Phase 2 ({len(phase2_afhp)} samples)')
+    
     plt.xlabel('AFHP')
     plt.ylabel('Return Value')
     plt.title(f'AFHP to Return Value Mapping - {test_name}')
     plt.grid(True, alpha=0.3)
     
-    # Add some statistics
-    min_afhp, max_afhp = min(afhp_values), max(afhp_values)
-    min_return, max_return = min(return_values), max(return_values)
+    # Add legend if we have both types of samples
+    if phase1_afhp and phase2_afhp:
+        plt.legend()
+    
+    # Calculate statistics from all samples
+    all_afhp = phase1_afhp + phase2_afhp
+    all_return = phase1_return + phase2_return
+    min_afhp, max_afhp = min(all_afhp), max(all_afhp)
+    min_return, max_return = min(all_return), max(all_return)
     
     plt.text(0.02, 0.98, 
-             f'Samples: {len(afhp_values)}\n'
+             f'Total: {total_samples} samples\n'
+             f'Phase 1: {len(phase1_afhp)} | Phase 2: {len(phase2_afhp)}\n'
              f'AFHP range: [{min_afhp:.1f}, {max_afhp:.1f}]\n'
              f'Return range: [{min_return:.1f}, {max_return:.1f}]',
              transform=plt.gca().transAxes, 
