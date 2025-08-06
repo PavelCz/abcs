@@ -524,16 +524,20 @@ def test_phase2_binary_bisection():
     def complex_return_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         # Linear AFHP mapping for simplicity
         afhp = threshold
+
+        interval_1 = 20
+        interval_2 = 50
+        interval_3 = 80
         
         # Complex non-linear return mapping that creates gaps when sampled sparsely
-        if afhp <= 20:
-            return_value = 30 + afhp * 0.5  # Slow growth
-        elif afhp <= 50:
-            return_value = 40 + (afhp - 20) * 1.5  # Fast growth
-        elif afhp <= 80:
-            return_value = 85 + (afhp - 50) * 0.2  # Very slow growth
+        if afhp <= interval_1:
+            return_value = 20 + afhp * 4  # very fast growth
+        elif afhp <= interval_2:
+            return_value = 20 + interval_1 * 4 + (afhp - interval_1) * 0.5  # slow growth
+        elif afhp <= interval_3:
+            return_value = 20 + interval_1 * 4 + (interval_2 - interval_1) * 0.5 + (afhp - interval_2) * 0.2  # Very slow growth
         else:
-            return_value = 91 + (afhp - 80) * 0.4  # Moderate growth
+            return_value = 20 + interval_1 * 4 + (interval_2 - interval_1) * 0.5 + (interval_3 - interval_2) * 0.2 + (afhp - interval_3) * 0.1  # even slower growth
             
         metadata = {
             "return_mean": return_value,
@@ -545,8 +549,8 @@ def test_phase2_binary_bisection():
     # Test parameters that should create gaps in return coverage
     sampler = BinarySearchSampler(
         eval_function=complex_return_function,
-        num_bins=12,  # Decent AFHP coverage
-        return_bins=15,  # Many return bins to test gap filling
+        num_bins=20,  # Decent AFHP coverage
+        return_bins=20,  # Many return bins to test gap filling
         unbounded_mode=True,  # Use unbounded mode for thorough testing
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
