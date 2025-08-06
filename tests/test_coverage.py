@@ -207,6 +207,9 @@ def test_full_coverage():
             all_samples=all_samples
         )
         print_artifact_summary(artifacts)
+    else:
+        print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
+        print("   To generate test artifacts, install matplotlib: pip install matplotlib")
     
     # Return test result
     return x_axis_pass and y_axis_pass
@@ -359,13 +362,17 @@ def test_afhp_coverage_guarantee():
                 print(f"  Missing bins: {gaps}")
 
     # Generate test artifacts for the most comprehensive test
-    if VISUALIZATION_AVAILABLE and largest_test_samples and largest_test_sampler:
-        artifacts = save_test_artifacts(
-            samples=largest_test_samples,
-            sampler=largest_test_sampler,
-            test_name="afhp_coverage_guarantee_20bins"
-        )
-        print_artifact_summary(artifacts)
+    if largest_test_samples and largest_test_sampler:
+        if VISUALIZATION_AVAILABLE:
+            artifacts = save_test_artifacts(
+                samples=largest_test_samples,
+                sampler=largest_test_sampler,
+                test_name="afhp_coverage_guarantee_20bins"
+            )
+            print_artifact_summary(artifacts)
+        else:
+            print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
+            print("   To generate test artifacts, install matplotlib: pip install matplotlib")
 
     return all_passed
 
@@ -443,6 +450,9 @@ def test_guaranteed_full_coverage():
             all_samples=all_samples
         )
         print_artifact_summary(artifacts)
+    else:
+        print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
+        print("   To generate test artifacts, install matplotlib: pip install matplotlib")
 
     return x_coverage == 100.0 and y_coverage == 100.0
 
@@ -602,6 +612,9 @@ def test_phase2_binary_bisection():
             all_samples=all_samples
         )
         print_artifact_summary(artifacts)
+    else:
+        print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
+        print("   To generate test artifacts, install matplotlib: pip install matplotlib")
     
     return phase2_worked and reasonable_coverage
 

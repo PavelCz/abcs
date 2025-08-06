@@ -9,6 +9,7 @@ mappings. These artifacts help with debugging and understanding algorithm behavi
 from pathlib import Path
 from typing import List, Tuple, Dict, Any, Optional
 import datetime
+import os
 
 try:
     import matplotlib.pyplot as plt
@@ -22,35 +23,74 @@ except ImportError:
 
 from abcs.types import SamplePoint
 
+# Global variable to track the current test run timestamp
+_CURRENT_TEST_RUN_TIMESTAMP = None
 
-def create_test_artifacts_dir(timestamp: Optional[str] = None) -> Path:
+
+def initialize_test_run() -> str:
     """
-    Create a timestamped test_artifacts subdirectory if it doesn't exist.
-    
-    Args:
-        timestamp: Optional timestamp string (if None, current time is used)
+    Initialize a new test run with a timestamp.
     
     Returns:
-        Path to the timestamped test_artifacts subdirectory
+        The timestamp string for the test run
     """
-    if timestamp is None:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    global _CURRENT_TEST_RUN_TIMESTAMP
+    _CURRENT_TEST_RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Create main test_artifacts directory
-    main_dir = Path("test_artifacts")
-    main_dir.mkdir(exist_ok=True)
+    # Create the main test run directory
+    test_run_dir = Path("test_artifacts") / _CURRENT_TEST_RUN_TIMESTAMP
+    test_run_dir.mkdir(parents=True, exist_ok=True)
     
-    # Create timestamped subdirectory
-    artifacts_dir = main_dir / timestamp
-    artifacts_dir.mkdir(exist_ok=True)
+    # Create a test run summary file
+    summary_file = test_run_dir / "test_run_info.txt"
+    with open(summary_file, 'w') as f:
+        f.write(f"Test Run Started: {_CURRENT_TEST_RUN_TIMESTAMP}\n")
+        f.write(f"Start Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"Test Run Directory: {test_run_dir}\n\n")
+        f.write("Individual Test Results:\n")
+        f.write("-" * 50 + "\n")
     
-    return artifacts_dir
+    print(f"📁 Test run artifacts directory: {test_run_dir}")
+    return _CURRENT_TEST_RUN_TIMESTAMP
+
+
+def get_current_test_run_timestamp() -> Optional[str]:
+    """
+    Get the current test run timestamp.
+    
+    Returns:
+        Current test run timestamp or None if not initialized
+    """
+    return _CURRENT_TEST_RUN_TIMESTAMP
+
+
+def create_test_artifacts_dir(test_name: str) -> Path:
+    """
+    Create a test-specific subdirectory within the current test run.
+    
+    Args:
+        test_name: Name of the test for the subdirectory
+    
+    Returns:
+        Path to the test-specific artifacts subdirectory
+    """
+    global _CURRENT_TEST_RUN_TIMESTAMP
+    
+    # If no test run is initialized, initialize one
+    if _CURRENT_TEST_RUN_TIMESTAMP is None:
+        initialize_test_run()
+    
+    # Create test-specific subdirectory
+    test_run_dir = Path("test_artifacts") / _CURRENT_TEST_RUN_TIMESTAMP
+    test_dir = test_run_dir / test_name
+    test_dir.mkdir(exist_ok=True)
+    
+    return test_dir
 
 
 def plot_threshold_to_afhp_mapping(
     samples: List[SamplePoint],
-    test_name: str = "test",
-    timestamp: Optional[str] = None
+    test_name: str = "test"
 ) -> Optional[Path]:
     """
     Generate and save a plot showing the threshold to AFHP mapping.
@@ -58,7 +98,6 @@ def plot_threshold_to_afhp_mapping(
     Args:
         samples: List of sample points from the algorithm
         test_name: Name of the test for the filename
-        timestamp: Optional timestamp string (if None, current time is used)
         
     Returns:
         Path to the saved plot, or None if matplotlib is not available
@@ -70,9 +109,6 @@ def plot_threshold_to_afhp_mapping(
     if not samples:
         print("Warning: No samples provided, skipping threshold-to-AFHP plot")
         return None
-    
-    if timestamp is None:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Extract threshold and AFHP values
     thresholds = []
@@ -113,8 +149,8 @@ def plot_threshold_to_afhp_mapping(
              bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
     
     # Save the plot
-    artifacts_dir = create_test_artifacts_dir(timestamp)
-    filename = f"threshold_to_afhp_{test_name}.png"
+    artifacts_dir = create_test_artifacts_dir(test_name)
+    filename = f"threshold_to_afhp.png"
     filepath = artifacts_dir / filename
     
     plt.tight_layout()
@@ -128,8 +164,7 @@ def plot_threshold_to_afhp_mapping(
 def plot_afhp_to_return_mapping(
     samples: List[SamplePoint],
     sampler,  # BinarySearchSampler instance
-    test_name: str = "test",
-    timestamp: Optional[str] = None
+    test_name: str = "test"
 ) -> Optional[Path]:
     """
     Generate and save a plot showing the AFHP to return value mapping.
@@ -138,7 +173,6 @@ def plot_afhp_to_return_mapping(
         samples: List of sample points from the algorithm
         sampler: BinarySearchSampler instance (needed to extract return values)
         test_name: Name of the test for the filename
-        timestamp: Optional timestamp string (if None, current time is used)
         
     Returns:
         Path to the saved plot, or None if matplotlib is not available
@@ -150,9 +184,6 @@ def plot_afhp_to_return_mapping(
     if not samples:
         print("Warning: No samples provided, skipping AFHP-to-return plot")
         return None
-    
-    if timestamp is None:
-        timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
     # Extract AFHP and return values
     afhp_values = []
@@ -198,8 +229,8 @@ def plot_afhp_to_return_mapping(
              bbox=dict(boxstyle='round', facecolor='lightblue', alpha=0.8))
     
     # Save the plot
-    artifacts_dir = create_test_artifacts_dir(timestamp)
-    filename = f"afhp_to_return_{test_name}.png"
+    artifacts_dir = create_test_artifacts_dir(test_name)
+    filename = f"afhp_to_return.png"
     filepath = artifacts_dir / filename
     
     plt.tight_layout()
@@ -229,31 +260,29 @@ def save_test_artifacts(
         Dictionary mapping artifact type to file path
     """
     if not MATPLOTLIB_AVAILABLE:
-        print("Warning: matplotlib not available, skipping all test artifacts")
-        return {"threshold_to_afhp": None, "afhp_to_return": None, "directory": None}
-    
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        # This should not be called when matplotlib is unavailable - the calling code should handle this
+        raise ImportError("matplotlib is required for test visualizations but is not installed. Install with: pip install matplotlib")
     
     # Use all_samples if provided, otherwise use primary samples
     plot_samples = all_samples if all_samples is not None else samples
     
     # Generate threshold-to-AFHP plot
     threshold_plot = plot_threshold_to_afhp_mapping(
-        plot_samples, test_name, timestamp
+        plot_samples, test_name
     )
     
     # Generate AFHP-to-return plot
     return_plot = plot_afhp_to_return_mapping(
-        plot_samples, sampler, test_name, timestamp
+        plot_samples, sampler, test_name
     )
     
-    # Create a summary file in the timestamped directory
-    artifacts_dir = create_test_artifacts_dir(timestamp)
+    # Create a summary file in the test-specific directory
+    artifacts_dir = create_test_artifacts_dir(test_name)
     summary_file = artifacts_dir / "test_summary.txt"
     
     with open(summary_file, 'w') as f:
         f.write(f"Test Name: {test_name}\n")
-        f.write(f"Timestamp: {timestamp}\n")
+        f.write(f"Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Number of samples: {len(plot_samples) if plot_samples else 0}\n")
         
         # Get coverage summary
