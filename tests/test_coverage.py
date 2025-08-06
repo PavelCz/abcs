@@ -7,7 +7,7 @@ This test verifies that:
 """
 
 import numpy as np
-from typing import Tuple, Dict, Any, Callable
+from typing import Tuple, Dict, Any
 from abcs import BinarySearchSampler
 
 # Import visualization utilities
@@ -106,58 +106,52 @@ def _create_pathological_afhp_mapping(threshold: float) -> float:
     return afhp
 
 
-def _create_pathological_cubic_eval_function() -> Callable[[float], Tuple[float, Dict[str, Any]]]:
+def _pathological_cubic_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
     """
-    Create pathological evaluation function with cubic return value mapping.
+    Pathological evaluation function with cubic return value mapping.
     Used in convergence tests for algorithmic robustness.
     """
-    def pathological_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
-        afhp = _create_pathological_afhp_mapping(threshold)
-        
-        # Return value with complex cubic relationship  
-        return_value = 20 + 60 * (afhp / 100) ** 3
-        
-        metadata = {
-            "return_mean": return_value,
-            "threshold_used": threshold,
-        }
-        
-        return afhp, metadata
+    afhp = _create_pathological_afhp_mapping(threshold)
     
-    return pathological_eval_function
+    # Return value with complex cubic relationship  
+    return_value = 20 + 60 * (afhp / 100) ** 3
+    
+    metadata = {
+        "return_mean": return_value,
+        "threshold_used": threshold,
+    }
+    
+    return afhp, metadata
 
 
-def _create_pathological_stepped_eval_function() -> Callable[[float], Tuple[float, Dict[str, Any]]]:
+def _pathological_stepped_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
     """
-    Create pathological evaluation function with stepped return value mapping.
+    Pathological evaluation function with stepped return value mapping.
     Used in sanity checks to ensure Phase 1 fails to achieve full coverage.
     """
-    def pathological_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
-        afhp = _create_pathological_afhp_mapping(threshold)
-        
-        # Very steep and concentrated return value relationship
-        # Most return values clustered in narrow ranges, creating gaps
-        if afhp < 5:
-            return_value = 25.0  # Flat low region
-        elif afhp < 15:
-            # Steep jump in narrow AFHP range
-            return_value = 30.0 + (afhp - 5) * 15.0  # Very steep: 30 -> 180
-        elif afhp < 25:
-            return_value = 180.0  # Flat middle region  
-        elif afhp < 35:
-            # Another steep jump in narrow range
-            return_value = 200.0 + (afhp - 25) * 20.0  # Very steep: 200 -> 400
-        else:
-            return_value = 400.0 + (afhp - 35) * 0.5  # Slow final rise
-            
-        metadata = {
-            "return_mean": return_value,
-            "threshold_used": threshold,
-        }
-        
-        return afhp, metadata
+    afhp = _create_pathological_afhp_mapping(threshold)
     
-    return pathological_eval_function
+    # Very steep and concentrated return value relationship
+    # Most return values clustered in narrow ranges, creating gaps
+    if afhp < 5:
+        return_value = 25.0  # Flat low region
+    elif afhp < 15:
+        # Steep jump in narrow AFHP range
+        return_value = 30.0 + (afhp - 5) * 15.0  # Very steep: 30 -> 180
+    elif afhp < 25:
+        return_value = 180.0  # Flat middle region  
+    elif afhp < 35:
+        # Another steep jump in narrow range
+        return_value = 200.0 + (afhp - 25) * 20.0  # Very steep: 200 -> 400
+    else:
+        return_value = 400.0 + (afhp - 35) * 0.5  # Slow final rise
+        
+    metadata = {
+        "return_mean": return_value,
+        "threshold_used": threshold,
+    }
+    
+    return afhp, metadata
 
 
 def test_full_coverage():
@@ -537,7 +531,7 @@ def test_convergence_with_pathological_function():
     print("=" * 60)
 
     # Use the pathological evaluation function with cubic return mapping
-    pathological_eval_function = _create_pathological_cubic_eval_function()
+    pathological_eval_function = _pathological_cubic_eval_function
 
     sampler = BinarySearchSampler(
         eval_function=pathological_eval_function,
@@ -912,7 +906,7 @@ def test_phase1_only_sanity_check():
     print("\n2. Testing pathological steep function (Phase 1 only)...")
     
     # Use the pathological evaluation function with stepped return mapping
-    pathological_eval_function = _create_pathological_stepped_eval_function()
+    pathological_eval_function = _pathological_stepped_eval_function
     
     sampler_patho = BinarySearchSampler(
         eval_function=pathological_eval_function,
