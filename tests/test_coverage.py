@@ -154,6 +154,53 @@ def _pathological_stepped_eval_function(threshold: float) -> Tuple[float, Dict[s
     return afhp, metadata
 
 
+def _calculate_return_coverage(samples, sampler, return_bins: int = None) -> Tuple[float, int, int]:
+    """
+    Calculate return value coverage for a list of samples.
+    
+    Args:
+        samples: List of sample points
+        sampler: BinarySearchSampler instance (for extract_return_value method)
+        return_bins: Number of return bins to use (if None, uses sampler.return_bins)
+        
+    Returns:
+        Tuple of (coverage_percentage, filled_bins_count, total_bins)
+    """
+    # Extract return values from samples
+    returns = []
+    for sample in samples:
+        if sample is not None:
+            try:
+                ret = sampler.extract_return_value(sample)
+                returns.append(ret)
+            except ValueError:
+                pass
+    
+    # Use provided return_bins or fall back to sampler's setting
+    num_bins = return_bins if return_bins is not None else sampler.return_bins
+    
+    if not returns or num_bins <= 0:
+        return 0.0, 0, num_bins
+    
+    # Calculate coverage
+    min_return = min(returns)
+    max_return = max(returns)
+    
+    if max_return <= min_return:
+        # All return values are the same - only fills one bin
+        return 100.0 / num_bins, 1, num_bins
+    
+    filled_return_bins = set()
+    for ret in returns:
+        bin_idx = int((ret - min_return) / (max_return - min_return) * num_bins)
+        if bin_idx >= num_bins:
+            bin_idx = num_bins - 1
+        filled_return_bins.add(bin_idx)
+    
+    coverage_percentage = 100.0 * len(filled_return_bins) / num_bins
+    return coverage_percentage, len(filled_return_bins), num_bins
+
+
 def test_full_coverage():
     """
     Test that the binary search sampler achieves 100% coverage on both axes.
@@ -622,30 +669,11 @@ def test_phase2_binary_bisection():
     print(f"  - Return refinement samples added: {len(return_samples)}")
     print(f"  - Total evaluations: {summary['total_evaluations']}")
     
-    # Calculate return coverage
-    returns = []
-    for sample in all_samples:
-        try:
-            ret = sampler.extract_return_value(sample)
-            returns.append(ret)
-        except ValueError:
-            pass
-            
-    return_coverage = 0.0
-    if returns and sampler.return_bins > 0:
-        min_return = min(returns)
-        max_return = max(returns)
-        if max_return > min_return:
-            filled_return_bins = set()
-            for ret in returns:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * sampler.return_bins)
-                if bin_idx >= sampler.return_bins:
-                    bin_idx = sampler.return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage = 100.0 * len(filled_return_bins) / sampler.return_bins
+    # Calculate return coverage using helper function
+    return_coverage, filled_bins_count, total_bins = _calculate_return_coverage(all_samples, sampler)
             
     print(f"  - Return coverage: {return_coverage:.1f}%")
-    print(f"  - Return bins filled: {len(filled_return_bins) if 'filled_return_bins' in locals() else 0}/{sampler.return_bins}")
+    print(f"  - Return bins filled: {filled_bins_count}/{total_bins}")
     
     # Verify that Phase 2 actually added samples and achieved full coverage
     phase2_worked = len(return_samples) > 0
@@ -872,30 +900,8 @@ def test_phase1_only_sanity_check():
     # Run Phase 1 only
     samples_log = sampler_log.run()
     
-    # Calculate y-axis (return) coverage manually
-    returns_log = []
-    for sample in samples_log:
-        if sample is not None:
-            try:
-                ret = sampler_log.extract_return_value(sample)
-                returns_log.append(ret)
-            except ValueError:
-                pass
-    
     # Calculate return coverage with 8 return bins (same as full tests)
-    return_coverage_log = 0.0
-    if returns_log:
-        min_return = min(returns_log)
-        max_return = max(returns_log)
-        if max_return > min_return:
-            filled_return_bins = set()
-            return_bins = 8  # Use same bin count as full coverage tests
-            for ret in returns_log:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
-                if bin_idx >= return_bins:
-                    bin_idx = return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage_log = 100.0 * len(filled_return_bins) / return_bins
+    return_coverage_log, _, _ = _calculate_return_coverage(samples_log, sampler_log, return_bins=8)
     
     print(f"   Y-axis coverage with logarithmic function: {return_coverage_log:.1f}%")
     phase1_fails_log = return_coverage_log < 100.0  # Should fail to achieve 100%
@@ -921,29 +927,8 @@ def test_phase1_only_sanity_check():
     # Run Phase 1 only
     samples_patho = sampler_patho.run()
     
-    # Calculate y-axis (return) coverage
-    returns_patho = []
-    for sample in samples_patho:
-        if sample is not None:
-            try:
-                ret = sampler_patho.extract_return_value(sample)
-                returns_patho.append(ret)
-            except ValueError:
-                pass
-    
-    return_coverage_patho = 0.0
-    if returns_patho:
-        min_return = min(returns_patho)
-        max_return = max(returns_patho)
-        if max_return > min_return:
-            filled_return_bins = set()
-            return_bins = 8
-            for ret in returns_patho:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
-                if bin_idx >= return_bins:
-                    bin_idx = return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage_patho = 100.0 * len(filled_return_bins) / return_bins
+    # Calculate return coverage with 8 return bins
+    return_coverage_patho, _, _ = _calculate_return_coverage(samples_patho, sampler_patho, return_bins=8)
     
     print(f"   Y-axis coverage with pathological function: {return_coverage_patho:.1f}%")
     phase1_fails_patho = return_coverage_patho < 100.0  # Should fail to achieve 100%

@@ -11,6 +11,9 @@ from typing import List, Tuple, Dict, Any, Optional
 import datetime
 import os
 
+# Import coverage calculation helper
+from .test_coverage import _calculate_return_coverage
+
 try:
     import matplotlib.pyplot as plt
     import matplotlib
@@ -365,29 +368,11 @@ def save_test_artifacts(
         f.write(f"Bins Filled: {summary['bins_filled']}/{sampler.num_bins}\n")
         
         if sampler.return_bins > 0:
-            # Calculate return coverage if applicable
-            returns = []
-            for sample in (all_samples or samples):
-                if sample is not None:
-                    try:
-                        ret = sampler.extract_return_value(sample)
-                        returns.append(ret)
-                    except ValueError:
-                        pass
-            
-            if returns:
-                min_return = min(returns)
-                max_return = max(returns)
-                if max_return > min_return:
-                    filled_return_bins = set()
-                    for ret in returns:
-                        bin_idx = int((ret - min_return) / (max_return - min_return) * sampler.return_bins)
-                        if bin_idx >= sampler.return_bins:
-                            bin_idx = sampler.return_bins - 1
-                        filled_return_bins.add(bin_idx)
-                    return_coverage = 100.0 * len(filled_return_bins) / sampler.return_bins
-                    f.write(f"Return Coverage: {return_coverage:.1f}%\n")
-                    f.write(f"Return Bins Filled: {len(filled_return_bins)}/{sampler.return_bins}\n")
+            # Calculate return coverage using helper function
+            samples_to_analyze = all_samples or samples
+            return_coverage, filled_bins_count, total_bins = _calculate_return_coverage(samples_to_analyze, sampler)
+            f.write(f"Return Coverage: {return_coverage:.1f}%\n")
+            f.write(f"Return Bins Filled: {filled_bins_count}/{total_bins}\n")
     
     print(f"Test artifacts saved in: {artifacts_dir}")
     
