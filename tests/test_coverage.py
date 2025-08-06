@@ -599,13 +599,13 @@ def test_phase2_binary_bisection():
     print(f"  - Return coverage: {return_coverage:.1f}%")
     print(f"  - Return bins filled: {len(filled_return_bins) if 'filled_return_bins' in locals() else 0}/{sampler.return_bins}")
     
-    # Verify that Phase 2 actually added samples
+    # Verify that Phase 2 actually added samples and achieved full coverage
     phase2_worked = len(return_samples) > 0
-    reasonable_coverage = return_coverage >= 60.0  # Should achieve decent coverage
+    full_coverage = return_coverage >= 100.0  # Should achieve 100% coverage with unbounded mode
     
     print(f"\nPhase 2 Test Results:")
     print(f"  - Added return samples: {'PASS' if phase2_worked else 'FAIL'}")
-    print(f"  - Achieved reasonable return coverage: {'PASS' if reasonable_coverage else 'FAIL'}")
+    print(f"  - Achieved full return coverage: {'PASS' if full_coverage else 'FAIL'}")
     
     # Generate test artifacts for this specific test
     if VISUALIZATION_AVAILABLE:
@@ -620,7 +620,7 @@ def test_phase2_binary_bisection():
         print("\n⚠️  Warning: Visualization utilities not available - test artifacts not generated")
         print("   To generate test artifacts, install matplotlib: pip install matplotlib")
     
-    return phase2_worked and reasonable_coverage
+    return phase2_worked and full_coverage
 
 
 def test_phase2_gap_identification():
