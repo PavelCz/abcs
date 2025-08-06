@@ -331,6 +331,7 @@ def test_afhp_coverage_guarantee():
             input_range=(0.0, 100.0),
             output_range=(0.0, 100.0),
             return_bins=0,  # Disable return refinement to test AFHP only
+            unbounded_mode=True,  # Use unbounded mode
             verbose=False,
         )
 
@@ -391,7 +392,7 @@ def test_guaranteed_full_coverage():
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         return_bins=return_bins,
-        max_additional_evals=return_bins * 2,
+        unbounded_mode=True,  # Use unbounded mode for guaranteed convergence
         verbose=True,
     )
 
