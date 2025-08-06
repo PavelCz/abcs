@@ -214,16 +214,16 @@ def test_full_coverage():
 
 def test_coverage_with_different_parameters():
     """
-    Test coverage with different parameter combinations.
+    Test coverage with different parameter combinations using unbounded mode.
     """
     print("\n\nTesting with different parameter combinations...")
     print("=" * 60)
 
-    # Test configurations with sufficient evaluation budget
+    # Test configurations in unbounded mode
     test_configs = [
-        {"num_bins": 5, "return_bins": 5, "max_evals": 20},
-        {"num_bins": 10, "return_bins": 10, "max_evals": 30},
-        {"num_bins": 15, "return_bins": 12, "max_evals": 40},
+        {"num_bins": 5, "return_bins": 5},
+        {"num_bins": 10, "return_bins": 10},
+        {"num_bins": 15, "return_bins": 12},
     ]
 
     all_passed = True
@@ -231,8 +231,7 @@ def test_coverage_with_different_parameters():
     for i, config in enumerate(test_configs):
         print(
             f"\nTest {i + 1}: num_bins={config['num_bins']}, "
-            f"return_bins={config['return_bins']}, "
-            f"max_evals={config['max_evals']}"
+            f"return_bins={config['return_bins']} (unbounded mode)"
         )
         print("-" * 40)
 
@@ -244,7 +243,7 @@ def test_coverage_with_different_parameters():
             input_range=(0.0, 100.0),
             output_range=(0.0, 100.0),
             return_bins=config["return_bins"],
-            max_additional_evals=config["max_evals"],
+            unbounded_mode=True,  # Use unbounded mode
             verbose=False,
         )
 
