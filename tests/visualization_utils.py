@@ -11,18 +11,12 @@ from typing import List, Dict, Optional
 import datetime
 
 # Import coverage calculation helper
-from .test_coverage import _calculate_return_coverage
+from tests.utils import _calculate_return_coverage
 
-try:
-    import matplotlib.pyplot as plt
-    import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib
 
-    # Use non-interactive backend for headless environments
-    matplotlib.use("Agg")
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    MATPLOTLIB_AVAILABLE = False
-    plt = None
+matplotlib.use("Agg")
 
 from abcs.types import SamplePoint
 
@@ -152,10 +146,6 @@ def plot_threshold_to_afhp_mapping(
     Returns:
         Path to the saved plot, or None if matplotlib is not available
     """
-    if not MATPLOTLIB_AVAILABLE:
-        print("Warning: matplotlib not available, skipping threshold-to-AFHP plot")
-        return None
-
     if not samples:
         print("Warning: No samples provided, skipping threshold-to-AFHP plot")
         return None
@@ -231,10 +221,6 @@ def plot_afhp_to_return_mapping(
     Returns:
         Path to the saved plot, or None if matplotlib is not available
     """
-    if not MATPLOTLIB_AVAILABLE:
-        print("Warning: matplotlib not available, skipping AFHP-to-return plot")
-        return None
-
     if not samples:
         print("Warning: No samples provided, skipping AFHP-to-return plot")
         return None
@@ -359,12 +345,6 @@ def save_test_artifacts(
     Returns:
         Dictionary mapping artifact type to file path
     """
-    if not MATPLOTLIB_AVAILABLE:
-        # This should not be called when matplotlib is unavailable - the calling code should handle this
-        raise ImportError(
-            "matplotlib is required for test visualizations but is not installed. Install with: pip install matplotlib"
-        )
-
     # Use all_samples if provided, otherwise use primary samples
     plot_samples = all_samples if all_samples is not None else samples
 

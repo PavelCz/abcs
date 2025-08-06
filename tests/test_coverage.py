@@ -9,14 +9,8 @@ This test verifies that:
 import numpy as np
 from typing import Tuple, Dict, Any
 from abcs import BinarySearchSampler
-
-# Import visualization utilities
-try:
-    from .visualization_utils import save_test_artifacts, print_artifact_summary
-
-    VISUALIZATION_AVAILABLE = True
-except ImportError:
-    VISUALIZATION_AVAILABLE = False
+from tests.utils import _calculate_return_coverage
+from tests.visualization_utils import save_test_artifacts, print_artifact_summary
 
 
 def create_test_evaluation_function(add_noise=True, full_range=False):
@@ -157,55 +151,6 @@ def _pathological_stepped_eval_function(
     return afhp, metadata
 
 
-def _calculate_return_coverage(
-    samples, sampler, return_bins: int = None
-) -> Tuple[float, int, int]:
-    """
-    Calculate return value coverage for a list of samples.
-
-    Args:
-        samples: List of sample points
-        sampler: BinarySearchSampler instance (for extract_return_value method)
-        return_bins: Number of return bins to use (if None, uses sampler.return_bins)
-
-    Returns:
-        Tuple of (coverage_percentage, filled_bins_count, total_bins)
-    """
-    # Extract return values from samples
-    returns = []
-    for sample in samples:
-        if sample is not None:
-            try:
-                ret = sampler.extract_return_value(sample)
-                returns.append(ret)
-            except ValueError:
-                pass
-
-    # Use provided return_bins or fall back to sampler's setting
-    num_bins = return_bins if return_bins is not None else sampler.return_bins
-
-    if not returns or num_bins <= 0:
-        return 0.0, 0, num_bins
-
-    # Calculate coverage
-    min_return = min(returns)
-    max_return = max(returns)
-
-    if max_return <= min_return:
-        # All return values are the same - only fills one bin
-        return 100.0 / num_bins, 1, num_bins
-
-    filled_return_bins = set()
-    for ret in returns:
-        bin_idx = int((ret - min_return) / (max_return - min_return) * num_bins)
-        if bin_idx >= num_bins:
-            bin_idx = num_bins - 1
-        filled_return_bins.add(bin_idx)
-
-    coverage_percentage = 100.0 * len(filled_return_bins) / num_bins
-    return coverage_percentage, len(filled_return_bins), num_bins
-
-
 def test_full_coverage():
     """
     Test that the binary search sampler achieves 100% coverage on both axes.
@@ -315,12 +260,6 @@ def test_full_coverage():
             print(f"  - X-axis coverage: {x_axis_coverage:.1f}% (expected 100%)")
         if not y_axis_pass:
             print(f"  - Y-axis coverage: {y_axis_coverage:.1f}% (expected 100%)")
-
-    # Generate test artifacts - required for test validation
-    if not VISUALIZATION_AVAILABLE:
-        raise ImportError(
-            "Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib"
-        )
 
     artifacts = save_test_artifacts(
         samples=samples,
@@ -482,11 +421,6 @@ def test_afhp_coverage_guarantee():
 
     # Generate test artifacts for the most comprehensive test - required for validation
     if largest_test_samples and largest_test_sampler:
-        if not VISUALIZATION_AVAILABLE:
-            raise ImportError(
-                "Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib"
-            )
-
         artifacts = save_test_artifacts(
             samples=largest_test_samples,
             sampler=largest_test_sampler,
@@ -560,12 +494,6 @@ def test_guaranteed_full_coverage():
     print("\nResults with linear function:")
     print(f"X-axis (AFHP) coverage: {x_coverage:.1f}%")
     print(f"Y-axis (return) coverage: {y_coverage:.1f}%")
-
-    # Generate test artifacts - required for test validation
-    if not VISUALIZATION_AVAILABLE:
-        raise ImportError(
-            "Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib"
-        )
 
     artifacts = save_test_artifacts(
         samples=_samples,
@@ -716,12 +644,6 @@ def test_phase2_binary_bisection():
     print("\nPhase 2 Test Results:")
     print(f"  - Added return samples: {'PASS' if phase2_worked else 'FAIL'}")
     print(f"  - Achieved full return coverage: {'PASS' if full_coverage else 'FAIL'}")
-
-    # Generate test artifacts - required for test validation
-    if not VISUALIZATION_AVAILABLE:
-        raise ImportError(
-            "Visualization utilities are required for test validation. Install matplotlib: pip install matplotlib"
-        )
 
     artifacts = save_test_artifacts(
         samples=afhp_samples,
