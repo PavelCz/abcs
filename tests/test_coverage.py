@@ -789,6 +789,152 @@ def test_phase2_edge_cases():
     return all_edge_cases_passed
 
 
+def test_phase1_only_sanity_check():
+    """
+    Sanity check: Verify that Phase 1 alone fails to achieve full y-axis coverage 
+    with steep functions, confirming that Phase 2 is actually necessary.
+    
+    This test ensures our challenging functions are indeed challenging and that
+    Phase 2 provides real value over Phase 1 alone.
+    """
+    print("\n\nTesting Phase 1 only sanity check...")
+    print("=" * 60)
+    print("Verifying that steep functions require Phase 2 for full y-axis coverage")
+    
+    test_results = []
+    
+    # Test 1: Steep logarithmic function (from create_test_evaluation_function)
+    print("\n1. Testing steep logarithmic function (Phase 1 only)...")
+    
+    eval_function_log = create_test_evaluation_function(add_noise=False)
+    
+    sampler_log = BinarySearchSampler(
+        eval_function=eval_function_log,
+        num_bins=10,
+        return_bins=0,  # Phase 1 only - no Phase 2
+        input_range=(0.0, 100.0),
+        output_range=(0.0, 100.0),
+        unbounded_mode=True,
+        verbose=False,
+    )
+    
+    # Run Phase 1 only
+    samples_log = sampler_log.run()
+    
+    # Calculate y-axis (return) coverage manually
+    returns_log = []
+    for sample in samples_log:
+        if sample is not None:
+            try:
+                ret = sampler_log.extract_return_value(sample)
+                returns_log.append(ret)
+            except ValueError:
+                pass
+    
+    # Calculate return coverage with 8 return bins (same as full tests)
+    return_coverage_log = 0.0
+    if returns_log:
+        min_return = min(returns_log)
+        max_return = max(returns_log)
+        if max_return > min_return:
+            filled_return_bins = set()
+            return_bins = 8  # Use same bin count as full coverage tests
+            for ret in returns_log:
+                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
+                if bin_idx >= return_bins:
+                    bin_idx = return_bins - 1
+                filled_return_bins.add(bin_idx)
+            return_coverage_log = 100.0 * len(filled_return_bins) / return_bins
+    
+    print(f"   Y-axis coverage with logarithmic function: {return_coverage_log:.1f}%")
+    phase1_fails_log = return_coverage_log < 100.0  # Should fail to achieve 100%
+    print(f"   Phase 1 fails to achieve full coverage: {'PASS' if phase1_fails_log else 'FAIL'}")
+    test_results.append(phase1_fails_log)
+    
+    # Test 2: Pathological steep function
+    print("\n2. Testing pathological steep function (Phase 1 only)...")
+    
+    def pathological_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
+        # Very steep function that's hard to sample uniformly
+        if threshold < 50:
+            afhp = threshold * 0.1  # Very slow growth
+        else:
+            afhp = 5 + (threshold - 50) * 1.9  # Very fast growth
+        
+        # Very steep and concentrated return value relationship
+        # Most return values clustered in narrow ranges, creating gaps
+        if afhp < 5:
+            return_value = 25.0  # Flat low region
+        elif afhp < 15:
+            # Steep jump in narrow AFHP range
+            return_value = 30.0 + (afhp - 5) * 15.0  # Very steep: 30 -> 180
+        elif afhp < 25:
+            return_value = 180.0  # Flat middle region  
+        elif afhp < 35:
+            # Another steep jump in narrow range
+            return_value = 200.0 + (afhp - 25) * 20.0  # Very steep: 200 -> 400
+        else:
+            return_value = 400.0 + (afhp - 35) * 0.5  # Slow final rise
+            
+        return afhp, {"return_mean": return_value}
+    
+    sampler_patho = BinarySearchSampler(
+        eval_function=pathological_eval_function,
+        num_bins=10,
+        return_bins=0,  # Phase 1 only - no Phase 2
+        input_range=(0.0, 100.0),
+        output_range=(0.0, 100.0),
+        unbounded_mode=True,
+        verbose=False,
+    )
+    
+    # Run Phase 1 only
+    samples_patho = sampler_patho.run()
+    
+    # Calculate y-axis (return) coverage
+    returns_patho = []
+    for sample in samples_patho:
+        if sample is not None:
+            try:
+                ret = sampler_patho.extract_return_value(sample)
+                returns_patho.append(ret)
+            except ValueError:
+                pass
+    
+    return_coverage_patho = 0.0
+    if returns_patho:
+        min_return = min(returns_patho)
+        max_return = max(returns_patho)
+        if max_return > min_return:
+            filled_return_bins = set()
+            return_bins = 8
+            for ret in returns_patho:
+                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
+                if bin_idx >= return_bins:
+                    bin_idx = return_bins - 1
+                filled_return_bins.add(bin_idx)
+            return_coverage_patho = 100.0 * len(filled_return_bins) / return_bins
+    
+    print(f"   Y-axis coverage with pathological function: {return_coverage_patho:.1f}%")
+    phase1_fails_patho = return_coverage_patho < 100.0  # Should fail to achieve 100%
+    print(f"   Phase 1 fails to achieve full coverage: {'PASS' if phase1_fails_patho else 'FAIL'}")
+    test_results.append(phase1_fails_patho)
+    
+    # Overall sanity check result
+    all_sanity_checks_passed = all(test_results)
+    
+    print(f"\nSanity Check Results:")
+    print(f"  - Steep functions are indeed challenging: {'PASS' if all_sanity_checks_passed else 'FAIL'}")
+    print(f"  - Phase 2 is necessary for full coverage: {'PASS' if all_sanity_checks_passed else 'FAIL'}")
+    
+    if all_sanity_checks_passed:
+        print("\n✓ SANITY CHECK PASSED: Phase 1 alone fails with steep functions, confirming Phase 2 necessity")
+    else:
+        print("\n❌ SANITY CHECK FAILED: Steep functions may not be challenging enough, or Phase 1 is too effective")
+    
+    return all_sanity_checks_passed
+
+
 if __name__ == "__main__":
     # Run main coverage test
     main_test_passed = test_full_coverage()
@@ -813,6 +959,9 @@ if __name__ == "__main__":
     
     # Run Phase 2 edge cases test
     phase2_edge_cases_passed = test_phase2_edge_cases()
+    
+    # Run Phase 1 only sanity check
+    sanity_check_passed = test_phase1_only_sanity_check()
 
     # Overall result
     print("\n" + "=" * 60)
@@ -826,6 +975,7 @@ if __name__ == "__main__":
         and phase2_bisection_passed
         and phase2_gaps_passed
         and phase2_edge_cases_passed
+        and sanity_check_passed
     ):
         print("✓ ALL TESTS PASSED - Coverage guarantees verified!")
         print(
@@ -854,4 +1004,6 @@ if __name__ == "__main__":
             print("  - Phase 2 gap identification test failed")
         if not phase2_edge_cases_passed:
             print("  - Phase 2 edge cases test failed")
+        if not sanity_check_passed:
+            print("  - Phase 1 only sanity check failed")
         exit(1)
