@@ -447,150 +447,14 @@ def test_guaranteed_full_coverage():
     return x_coverage == 100.0 and y_coverage == 100.0
 
 
-def test_unbounded_mode():
+def test_convergence_with_pathological_function():
     """
-    Test unbounded mode functionality to ensure it achieves better coverage
-    than bounded mode and terminates properly.
+    Test that the algorithm properly converges and terminates even with pathological functions.
+    
+    This test uses a function with steep changes that's difficult to sample uniformly,
+    verifying that unbounded mode handles edge cases correctly.
     """
-    print("\n\nTesting unbounded mode...")
-    print("=" * 60)
-
-    # Create test evaluation function
-    eval_function = create_test_evaluation_function(add_noise=False)
-
-    # Test parameters
-    num_bins = 10
-    return_bins = 8
-    max_evals = 5  # Intentionally low to test unbounded vs bounded difference
-
-    print("1. Testing bounded mode with low evaluation limit...")
-    # Test bounded mode first
-    sampler_bounded = BinarySearchSampler(
-        eval_function=eval_function,
-        num_bins=num_bins,
-        input_range=(0.0, 100.0),
-        output_range=(0.0, 100.0),
-        return_bins=return_bins,
-        max_additional_evals=max_evals,
-        unbounded_mode=False,
-        verbose=False,
-    )
-
-    samples_bounded = sampler_bounded.run_with_return_refinement()
-    summary_bounded = sampler_bounded.get_coverage_summary()
-    all_samples_bounded = sampler_bounded.get_all_samples_including_refinement()
-
-    # Calculate return coverage for bounded mode
-    returns_bounded = []
-    for sample in all_samples_bounded:
-        try:
-            ret = sampler_bounded.extract_return_value(sample)
-            returns_bounded.append(ret)
-        except ValueError:
-            pass
-
-    return_coverage_bounded = 0.0
-    if returns_bounded and return_bins > 0:
-        min_return = min(returns_bounded)
-        max_return = max(returns_bounded)
-        if max_return > min_return:
-            filled_return_bins = set()
-            for ret in returns_bounded:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
-                if bin_idx >= return_bins:
-                    bin_idx = return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage_bounded = 100.0 * len(filled_return_bins) / return_bins
-
-    print("2. Testing unbounded mode...")
-    # Test unbounded mode
-    sampler_unbounded = BinarySearchSampler(
-        eval_function=eval_function,
-        num_bins=num_bins,
-        input_range=(0.0, 100.0),
-        output_range=(0.0, 100.0),
-        return_bins=return_bins,
-        max_additional_evals=max_evals,  # This should be ignored
-        unbounded_mode=True,
-        verbose=True,
-    )
-
-    samples_unbounded = sampler_unbounded.run_with_return_refinement()
-    summary_unbounded = sampler_unbounded.get_coverage_summary()
-    all_samples_unbounded = sampler_unbounded.get_all_samples_including_refinement()
-
-    # Calculate return coverage for unbounded mode
-    returns_unbounded = []
-    for sample in all_samples_unbounded:
-        try:
-            ret = sampler_unbounded.extract_return_value(sample)
-            returns_unbounded.append(ret)
-        except ValueError:
-            pass
-
-    return_coverage_unbounded = 0.0
-    if returns_unbounded and return_bins > 0:
-        min_return = min(returns_unbounded)
-        max_return = max(returns_unbounded)
-        if max_return > min_return:
-            filled_return_bins = set()
-            for ret in returns_unbounded:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
-                if bin_idx >= return_bins:
-                    bin_idx = return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage_unbounded = 100.0 * len(filled_return_bins) / return_bins
-
-    # Compare results
-    print("\nComparison Results:")
-    print(f"Bounded mode:")
-    print(f"  - AFHP coverage: {summary_bounded['coverage_percentage']:.1f}%")
-    print(f"  - Return coverage: {return_coverage_bounded:.1f}%")
-    print(f"  - Total evaluations: {summary_bounded['total_evaluations']}")
-    print(f"  - Return refinement samples: {len(sampler_bounded.get_return_refinement_samples())}")
-
-    print(f"Unbounded mode:")
-    print(f"  - AFHP coverage: {summary_unbounded['coverage_percentage']:.1f}%")
-    print(f"  - Return coverage: {return_coverage_unbounded:.1f}%")
-    print(f"  - Total evaluations: {summary_unbounded['total_evaluations']}")
-    print(f"  - Return refinement samples: {len(sampler_unbounded.get_return_refinement_samples())}")
-
-    # Generate test artifacts for unbounded mode
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=samples_unbounded,
-            sampler=sampler_unbounded,
-            test_name="unbounded_mode",
-            all_samples=all_samples_unbounded
-        )
-        print_artifact_summary(artifacts)
-
-    # Test assertions
-    unbounded_better_return_coverage = return_coverage_unbounded >= return_coverage_bounded
-    unbounded_same_afhp_coverage = summary_unbounded['coverage_percentage'] == summary_bounded['coverage_percentage']
-    unbounded_more_return_samples = len(sampler_unbounded.get_return_refinement_samples()) >= len(sampler_bounded.get_return_refinement_samples())
-    
-    print("\nTest Results:")
-    print(f"  - Unbounded achieves same/better return coverage: {'PASS' if unbounded_better_return_coverage else 'FAIL'}")
-    print(f"  - Unbounded maintains AFHP coverage: {'PASS' if unbounded_same_afhp_coverage else 'FAIL'}")
-    print(f"  - Unbounded generates more return samples: {'PASS' if unbounded_more_return_samples else 'FAIL'}")
-    
-    # Overall result
-    all_tests_passed = unbounded_better_return_coverage and unbounded_same_afhp_coverage and unbounded_more_return_samples
-    
-    if all_tests_passed:
-        print("\n✓ UNBOUNDED MODE TEST PASSED: Unbounded mode performs better than bounded mode!")
-    else:
-        print("\n✗ UNBOUNDED MODE TEST FAILED: Some assertions failed")
-    
-    return all_tests_passed
-
-
-def test_unbounded_mode_convergence():
-    """
-    Test that unbounded mode properly converges and terminates even in edge cases.
-    """
-    print("\n\nTesting unbounded mode convergence...")
+    print("\n\nTesting convergence with pathological function...")
     print("=" * 60)
 
     # Create a pathological evaluation function that's hard to sample
@@ -673,7 +537,7 @@ def test_phase2_binary_bisection():
         eval_function=complex_return_function,
         num_bins=12,  # Decent AFHP coverage
         return_bins=15,  # Many return bins to test gap filling
-        max_additional_evals=30,  # Sufficient budget for testing
+        unbounded_mode=True,  # Use unbounded mode for thorough testing
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         verbose=True,
@@ -838,7 +702,7 @@ def test_phase2_edge_cases():
         eval_function=constant_return_function,
         num_bins=5,
         return_bins=5,
-        max_additional_evals=10,
+        unbounded_mode=True,
         verbose=False,
     )
     
@@ -863,7 +727,7 @@ def test_phase2_edge_cases():
         eval_function=minimal_samples_function,
         num_bins=10,
         return_bins=5,
-        max_additional_evals=10,
+        unbounded_mode=True,
         verbose=False,
     )
     
@@ -893,7 +757,7 @@ def test_phase2_edge_cases():
         eval_function=extreme_range_function,
         num_bins=8,
         return_bins=6,
-        max_additional_evals=15,
+        unbounded_mode=True,
         verbose=False,
     )
     
@@ -925,11 +789,8 @@ if __name__ == "__main__":
     # Run guaranteed full coverage test
     guaranteed_test_passed = test_guaranteed_full_coverage()
 
-    # Run unbounded mode tests
-    unbounded_test_passed = test_unbounded_mode()
-    
-    # Run unbounded mode convergence test
-    unbounded_convergence_passed = test_unbounded_mode_convergence()
+    # Run convergence test with pathological function
+    convergence_passed = test_convergence_with_pathological_function()
     
     # Run Phase 2 binary bisection tests
     phase2_bisection_passed = test_phase2_binary_bisection()
@@ -948,8 +809,7 @@ if __name__ == "__main__":
         and param_tests_passed
         and afhp_test_passed
         and guaranteed_test_passed
-        and unbounded_test_passed
-        and unbounded_convergence_passed
+        and convergence_passed
         and phase2_bisection_passed
         and phase2_gaps_passed
         and phase2_edge_cases_passed
@@ -959,7 +819,7 @@ if __name__ == "__main__":
             "  - Algorithm achieves 100% coverage on both axes when function spans full range"
         )
         print(
-            "  - Unbounded mode provides better coverage and terminates properly"
+            "  - Unbounded mode ensures convergence for all test functions"
         )
         print(
             "  - Phase 2 binary bisection correctly fills return value gaps"
@@ -973,10 +833,8 @@ if __name__ == "__main__":
             )
         if not guaranteed_test_passed:
             print("  - Failed to achieve 100% coverage even with linear function")
-        if not unbounded_test_passed:
-            print("  - Unbounded mode test failed")
-        if not unbounded_convergence_passed:
-            print("  - Unbounded mode convergence test failed")
+        if not convergence_passed:
+            print("  - Convergence test with pathological function failed")
         if not phase2_bisection_passed:
             print("  - Phase 2 binary bisection test failed")
         if not phase2_gaps_passed:
