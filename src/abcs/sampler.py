@@ -6,6 +6,7 @@ efficiently sampling points along monotonic curves with coverage guarantees.
 """
 
 from typing import List, Tuple, Callable, Optional, Any, Dict
+import bisect
 import numpy as np
 from numpy.typing import NDArray
 
@@ -179,23 +180,22 @@ class BinarySearchSampler:
             # Not enough samples to refine
             return []
 
-        # Build list of samples with their return values
-        samples_with_returns = []
+        # Build sorted list of (return_value, sample) tuples using bisect
+        sorted_returns = []  # List[Tuple[float, SamplePoint]]
         for sample in valid_samples:
             try:
                 ret = self.extract_return_value(sample)
+                # Use bisect to maintain sorted order by return value
+                bisect.insort(sorted_returns, (ret, sample))
             except ValueError:
                 continue
-            samples_with_returns.append((sample, ret))
 
-        if len(samples_with_returns) < 2:
+        if len(sorted_returns) < 2:
             # Not enough usable return values; nothing to refine
             return []
-
-        # Sort samples by return value
-        samples_with_returns.sort(key=lambda x: x[1])
-        min_return = samples_with_returns[0][1]
-        max_return = samples_with_returns[-1][1]
+        
+        min_return = sorted_returns[0][0]  # First return value
+        max_return = sorted_returns[-1][0]  # Last return value
 
         if max_return <= min_return:
             # No variation to fill
@@ -206,7 +206,7 @@ class BinarySearchSampler:
 
         # Find which return bins are already filled
         filled_return_bins = set()
-        for sample, ret in samples_with_returns:
+        for ret, sample in sorted_returns:
             bin_idx = self.determine_return_bin(ret, return_bin_edges)
             filled_return_bins.add(bin_idx)
 
@@ -241,8 +241,9 @@ class BinarySearchSampler:
                 left_sample = None
                 right_sample = None
 
-                # Find the best bracketing samples for this gap
-                for i, (sample, ret) in enumerate(samples_with_returns):
+                # Find the best bracketing samples for this gap using binary search
+                # Since sorted_returns is sorted by return value, we can efficiently find brackets
+                for ret, sample in sorted_returns:
                     sample_bin = self.determine_return_bin(ret, return_bin_edges)
 
                     # Update left bracket if this sample is to the left of the gap
@@ -826,7 +827,7 @@ class BinarySearchSampler:
         self, value: float, bin_edges: NDArray[np.float64], num_bins: int
     ) -> int:
         """
-        Generic method to determine which bin a value falls into.
+        Generic method to determine which bin a value falls into using numpy.digitize.
 
         Args:
             value: The value to bin
@@ -836,24 +837,24 @@ class BinarySearchSampler:
         Returns:
             Bin index (0 to num_bins-1)
         """
-        min_val = bin_edges[0]
-        max_val = bin_edges[-1]
-
-        # Handle edge cases
-        if value <= min_val:
+        # Use numpy.digitize to find the bin
+        # digitize returns 1-based index, with 0 meaning "before first edge"
+        # and len(bin_edges) meaning "after last edge"
+        bin_idx = np.digitize(value, bin_edges, right=False)
+        
+        # Convert to 0-based index and clamp to valid range
+        # bin_idx = 0 means before first edge -> return 0
+        # bin_idx = len(bin_edges) means after last edge -> return num_bins - 1
+        # bin_idx in [1, len(bin_edges)-1] -> return bin_idx - 1
+        
+        if bin_idx == 0:
             return 0
-        if value >= max_val:
+        elif bin_idx >= len(bin_edges):
             return num_bins - 1
-
-        # Find the appropriate bin
-        for i in range(len(bin_edges) - 1):
-            if bin_edges[i] <= value < bin_edges[i + 1]:
-                return i
-
-        # If we reached here, the value did not fit any bin interval
-        raise ValueError(
-            "Value did not fall within any provided bin interval; check bin edges"
-        )
+        else:
+            # Normal case: value falls within the bins
+            # digitize returns 1-based, we want 0-based
+            return min(bin_idx - 1, num_bins - 1)
 
     def _bins_remaining_generic(
         self, left_idx: int, right_idx: int, filled_bins, exclusive: bool = True
