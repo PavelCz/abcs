@@ -79,7 +79,6 @@ class BinarySearchSampler:
             output_range[0], output_range[1], num_bins + 1
         )
         self.bin_samples: List[Optional[SamplePoint]] = [None] * num_bins
-        self.all_samples: List[SamplePoint] = []
         self.return_refinement_samples: List[SamplePoint] = []
         self.total_evals: int = 0
 
@@ -187,7 +186,7 @@ class BinarySearchSampler:
         samples_with_returns = []
         for sample in valid_samples:
             ret = self.return_value_function(sample.metadata)
-            
+
             samples_with_returns.append((sample, ret))
 
         if len(samples_with_returns) < 2:
@@ -318,7 +317,6 @@ class BinarySearchSampler:
         sample = SamplePoint(
             input_value=input_value, output_value=output_value, metadata=metadata
         )
-        self.all_samples.append(sample)
         return sample
 
     def determine_bin(self, output_value: float) -> int:
@@ -407,10 +405,6 @@ class BinarySearchSampler:
     def get_filled_samples(self) -> List[SamplePoint]:
         """Return only the non-None samples from bins."""
         return [s for s in self.bin_samples if s is not None]
-
-    def get_all_samples(self) -> List[SamplePoint]:
-        """Return all samples in evaluation order."""
-        return self.all_samples
 
     def get_coverage_summary(self) -> Dict[str, Any]:
         """Get summary statistics about the sampling coverage."""
@@ -687,7 +681,7 @@ class BinarySearchSampler:
             iteration_count += 1
 
         return None
-    
+
     def _determine_bin_generic(
         self, value: float, bin_edges: NDArray[np.float64], num_bins: int
     ) -> int:
@@ -770,10 +764,6 @@ class BinarySearchSampler:
             raise RuntimeError(
                 f"Reached safety limit of {self.max_total_evals} total evaluations"
             )
-
-    def get_all_samples_including_refinement(self) -> List[SamplePoint]:
-        """Return all samples including those from return refinement."""
-        return self.all_samples + self.return_refinement_samples
 
     def get_return_refinement_samples(self) -> List[SamplePoint]:
         """Return only the samples added during return refinement."""
