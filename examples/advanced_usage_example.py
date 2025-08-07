@@ -1,8 +1,8 @@
 """
-Unbounded mode example for ABCS library.
+Advanced usage example for ABCS library.
 
-This example demonstrates the difference between bounded and unbounded mode,
-showing how unbounded mode can achieve better coverage by removing evaluation limits.
+This example demonstrates the comprehensive coverage capabilities of the simplified API,
+showing how the algorithm automatically achieves optimal coverage with built-in safety mechanisms.
 """
 
 import numpy as np
@@ -53,10 +53,10 @@ def create_challenging_function():
     return eval_function
 
 
-def compare_bounded_vs_unbounded():
-    """Compare bounded mode vs unbounded mode performance."""
+def demonstrate_improved_coverage():
+    """Demonstrate the improved coverage capabilities of the simplified API."""
     print("=" * 70)
-    print("BOUNDED vs UNBOUNDED MODE COMPARISON")
+    print("ADVANCED COVERAGE DEMONSTRATION")
     print("=" * 70)
 
     # Set random seed for reproducible results
@@ -68,61 +68,29 @@ def compare_bounded_vs_unbounded():
     # Test parameters
     num_bins = 12
     return_bins = 8
-    max_evals = 8  # Intentionally low to show difference
 
-    print("\n1. BOUNDED MODE (Limited Evaluations)")
-    print("-" * 40)
+    print("\nDemonstrating comprehensive coverage with simplified API...")
+    print("-" * 50)
 
-    # Test bounded mode
-    sampler_bounded = BinarySearchSampler(
+    # Create sampler with simplified API (always uses optimal approach)
+    sampler = BinarySearchSampler(
         eval_function=eval_func,
         num_bins=num_bins,
         return_bins=return_bins,
-        max_additional_evals=max_evals,
-        unbounded_mode=False,
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         verbose=True,
     )
 
-    sampler_bounded.run_with_return_refinement()
-    summary_bounded = sampler_bounded.get_coverage_summary()
+    sampler.run_with_return_refinement()
+    summary = sampler.get_coverage_summary()
 
-    print("\nBounded Mode Results:")
-    print(f"  Primary Coverage: {summary_bounded['coverage_percentage']:.1f}%")
-    print(f"  Total Evaluations: {summary_bounded['total_evaluations']}")
-    print(
-        f"  Return Samples Added: {len(sampler_bounded.get_return_refinement_samples())}"
-    )
+    print("\nSimplified API Results:")
+    print(f"  Primary Coverage: {summary['coverage_percentage']:.1f}%")
+    print(f"  Total Evaluations: {summary['total_evaluations']}")
+    print(f"  Return Samples Added: {len(sampler.get_return_refinement_samples())}")
 
-    # Reset random seed for fair comparison
-    np.random.seed(42)
-
-    print("\n2. UNBOUNDED MODE (Convergence Guaranteed)")
-    print("-" * 45)
-
-    # Test unbounded mode
-    sampler_unbounded = BinarySearchSampler(
-        eval_function=eval_func,
-        num_bins=num_bins,
-        return_bins=return_bins,
-        max_additional_evals=max_evals,  # This will be ignored
-        input_range=(0.0, 100.0),
-        output_range=(0.0, 100.0),
-        verbose=True,
-    )
-
-    sampler_unbounded.run_with_return_refinement()
-    summary_unbounded = sampler_unbounded.get_coverage_summary()
-
-    print("\nUnbounded Mode Results:")
-    print(f"  Primary Coverage: {summary_unbounded['coverage_percentage']:.1f}%")
-    print(f"  Total Evaluations: {summary_unbounded['total_evaluations']}")
-    print(
-        f"  Return Samples Added: {len(sampler_unbounded.get_return_refinement_samples())}"
-    )
-
-    # Calculate secondary coverage for both modes
+    # Calculate secondary coverage
     def calculate_return_coverage(sampler, return_bins):
         all_samples = sampler.get_all_samples_including_refinement()
         returns = []
@@ -150,38 +118,23 @@ def compare_bounded_vs_unbounded():
 
         return 100.0 * len(filled_bins) / return_bins
 
-    return_coverage_bounded = calculate_return_coverage(sampler_bounded, return_bins)
-    return_coverage_unbounded = calculate_return_coverage(
-        sampler_unbounded, return_bins
-    )
+    return_coverage = calculate_return_coverage(sampler, return_bins)
 
     print("\n" + "=" * 70)
-    print("COMPARISON SUMMARY")
+    print("COVERAGE SUMMARY")
     print("=" * 70)
-    print(f"{'Metric':<25} {'Bounded':<15} {'Unbounded':<15} {'Improvement'}")
-    print("-" * 70)
-    print(
-        f"{'Primary Coverage':<25} {summary_bounded['coverage_percentage']:>6.1f}% {summary_unbounded['coverage_percentage']:>12.1f}% {summary_unbounded['coverage_percentage'] - summary_bounded['coverage_percentage']:>10.1f}%"
-    )
-    print(
-        f"{'Secondary Coverage':<25} {return_coverage_bounded:>6.1f}% {return_coverage_unbounded:>12.1f}% {return_coverage_unbounded - return_coverage_bounded:>10.1f}%"
-    )
-    print(
-        f"{'Total Evaluations':<25} {summary_bounded['total_evaluations']:>8} {summary_unbounded['total_evaluations']:>14} {summary_unbounded['total_evaluations'] - summary_bounded['total_evaluations']:>+8}"
-    )
-    print(
-        f"{'Return Samples':<25} {len(sampler_bounded.get_return_refinement_samples()):>8} {len(sampler_unbounded.get_return_refinement_samples()):>14} {len(sampler_unbounded.get_return_refinement_samples()) - len(sampler_bounded.get_return_refinement_samples()):>+8}"
-    )
+    print(f"Primary Coverage: {summary['coverage_percentage']:.1f}%")
+    print(f"Secondary Coverage: {return_coverage:.1f}%")
+    print(f"Total Evaluations: {summary['total_evaluations']}")
+    print(f"Return Samples Added: {len(sampler.get_return_refinement_samples())}")
 
     print(
-        f"\n✓ Unbounded mode achieved better or equal coverage using {summary_unbounded['total_evaluations']} evaluations"
+        f"\n✓ Simplified API achieved comprehensive coverage using {summary['total_evaluations']} evaluations"
     )
     print(
         "✓ Theoretical convergence guarantee: All bins will be filled if function spans range"
     )
-    print(
-        f"✓ Practical safety: Maximum {sampler_unbounded.max_total_evals_unbounded} evaluations limit"
-    )
+    print(f"✓ Practical safety: Maximum {sampler.max_total_evals} evaluations limit")
 
 
 def demonstrate_convergence_safety():
@@ -217,9 +170,9 @@ def demonstrate_convergence_safety():
     print("\nPathological Function Results:")
     print(f"  Coverage Achieved: {summary['coverage_percentage']:.1f}%")
     print(f"  Total Evaluations: {summary['total_evaluations']}")
-    print(f"  Safety Limit: {sampler.max_total_evals_unbounded}")
+    print(f"  Safety Limit: {sampler.max_total_evals}")
     print(
-        f"  Terminated Safely: {'✓' if summary['total_evaluations'] < sampler.max_total_evals_unbounded else '✗'}"
+        f"  Terminated Safely: {'✓' if summary['total_evaluations'] < sampler.max_total_evals else '✗'}"
     )
 
     if summary["coverage_percentage"] < 100:
@@ -228,23 +181,22 @@ def demonstrate_convergence_safety():
 
 
 if __name__ == "__main__":
-    print("ABCS Unbounded Mode Demonstration")
-    print("This example shows how unbounded mode can achieve better coverage")
-    print("while maintaining safety through convergence detection.\n")
+    print("ABCS Advanced Coverage Demonstration")
+    print("This example shows the comprehensive coverage capabilities")
+    print("of the simplified API with automatic optimization.\n")
 
-    # Run the comparison
-    compare_bounded_vs_unbounded()
+    # Run the demonstration
+    demonstrate_improved_coverage()
 
     # Demonstrate safety mechanisms
     demonstrate_convergence_safety()
 
     print("\n" + "=" * 70)
-    print("RECOMMENDATIONS")
+    print("KEY FEATURES OF SIMPLIFIED API")
     print("=" * 70)
-    print(
-        "• Use unbounded_mode=True for critical applications requiring maximum coverage"
-    )
-    print("• Use bounded mode for quick exploration with evaluation budget constraints")
-    print("• Unbounded mode includes safety limits to prevent infinite execution")
-    print("• Monitor verbose output to understand convergence behavior")
+    print("• Automatically uses optimal coverage strategy")
+    print("• Theoretical convergence guarantees with safety mechanisms")
+    print("• No need to choose between bounded/unbounded modes")
+    print("• Simplified parameter set for easier usage")
+    print("• Monitor verbose output to understand algorithm behavior")
     print("=" * 70)
