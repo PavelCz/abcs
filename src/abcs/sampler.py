@@ -20,7 +20,7 @@ class BinarySearchSampler:
     binary search in the input space. It operates in two phases:
     1. Phase 1: AFHP coverage via recursive binary search
     2. Phase 2: Return value gap filling via recursive binary bisection (optional)
-    
+
     Phase 2 uses a systematic approach to fill gaps in return value coverage:
     - Identifies contiguous intervals of empty return bins
     - Applies recursive binary search within each gap interval
@@ -36,6 +36,7 @@ class BinarySearchSampler:
         input_to_threshold: Optional[Callable[[float], float]] = None,
         verbose: bool = True,
         return_bins: int = 0,
+        return_value_function: Optional[Callable[[Dict[str, Any]], float]] = None,
         max_additional_evals: int = 20,
         unbounded_mode: bool = False,
     ):
@@ -52,6 +53,8 @@ class BinarySearchSampler:
                                to actual thresholds for evaluation
             verbose: Whether to print progress messages
             return_bins: Number of return bins for curve smoothing (0 = disabled)
+            return_value_function: Function to extract return value from sample 
+                metadata. Only used if return_bins > 0.
             max_additional_evals: Maximum additional evaluations for return refinement
                                  (ignored when unbounded_mode=True)
             unbounded_mode: If True, removes evaluation limits and continues until
@@ -67,7 +70,12 @@ class BinarySearchSampler:
         self.return_bins = return_bins
         self.max_additional_evals = max_additional_evals
         self.unbounded_mode = unbounded_mode
-        
+        self.return_value_function = return_value_function
+        if return_value_function is None and return_bins > 0:
+            raise ValueError(
+                "return_value_function must be provided if return_bins > 0"
+            )
+
         # Safety limit for unbounded mode (prevent infinite loops)
         self.max_total_evals_unbounded = 10000
 
@@ -120,7 +128,7 @@ class BinarySearchSampler:
         return self._determine_bin_generic(output_value, self.bin_edges, self.num_bins)
 
     def _bins_remaining_generic(
-        self, left_idx: int, right_idx: int, filled_bins: set, exclusive: bool = True
+        self, left_idx: int, right_idx: int, filled_bins, exclusive: bool = True
     ) -> bool:
         """
         Generic method to check if there are empty bins in the given range.
@@ -263,7 +271,8 @@ class BinarySearchSampler:
         if self.verbose:
             print(f"Total evaluations: {self.total_evals}")
             print(
-                f"Bins filled: {sum(1 for s in self.bin_samples if s is not None)}/{self.num_bins}"
+                f"Bins filled: {sum(1 for s in self.bin_samples if s is not None)}"
+                f"/{self.num_bins}"
             )
 
         return self.bin_samples
@@ -308,8 +317,13 @@ class BinarySearchSampler:
 
     def extract_return_value(self, sample: SamplePoint) -> float:
         """Extract return value from sample metadata."""
-        # Try different possible keys for return value
+        # If return_value_function is provided, use it
+        if self.return_value_function:
+            return self.return_value_function(sample.metadata)
+        
+        # Otherwise use fallback logic for backward compatibility
         metadata = sample.metadata
+        
         if "summary" in metadata:
             summary = metadata["summary"]
             if isinstance(summary, dict):
@@ -417,7 +431,7 @@ class BinarySearchSampler:
         Returns:
             Number of evaluations performed
         """
-        # Check convergence criteria
+        # Check convergence criteria using the generic method
         if self._check_convergence(left_sample.input_value, right_sample.input_value, iteration_count):
             return 0
         
@@ -480,7 +494,7 @@ class BinarySearchSampler:
             List of additional samples to fill return gaps
         """
         if self.return_bins == 0:
-            return []
+            raise ValueError("Called fill_return_gaps with return_bins=0")
 
         # Extract valid samples and their returns
         valid_samples = [s for s in initial_samples if s is not None]
@@ -490,11 +504,14 @@ class BinarySearchSampler:
         # Build list of samples with their return values
         samples_with_returns = []
         for sample in valid_samples:
-            try:
-                ret = self.extract_return_value(sample)
-                samples_with_returns.append((sample, ret))
-            except ValueError:
-                continue
+            if self.return_value_function:
+                ret = self.return_value_function(sample.metadata)
+            else:
+                try:
+                    ret = self.extract_return_value(sample)
+                except ValueError:
+                    continue
+            samples_with_returns.append((sample, ret))
                 
         if len(samples_with_returns) < 2:
             if self.verbose:
@@ -590,11 +607,14 @@ class BinarySearchSampler:
         max_iterations: Optional[int] = None,
     ) -> Optional[SamplePoint]:
         """
-        Binary search for an input value that produces a return in the specified range.
+        Search for a sample within a specific return value range.
+
+        Uses binary search between existing samples to find a new sample
+        whose return value falls within [return_min, return_max].
 
         Args:
-            existing_samples: Existing samples to guide the search
-            target_return: Target return value (midpoint of range)
+            existing_samples: List of existing samples to use for bracketing
+            target_return: Target return value to search for
             return_min: Minimum acceptable return value
             return_max: Maximum acceptable return value
             max_iterations: Maximum binary search iterations (None = use defaults)
@@ -621,23 +641,26 @@ class BinarySearchSampler:
         if len(samples_with_returns) < 2:
             return None
 
-        samples_with_returns.sort(key=lambda x: x[1])  # Sort by return value
+        # Sort by return value
+        samples_with_returns.sort(key=lambda x: x[1])
 
-        # Find the two samples that bracket the target return
-        lower_sample, lower_return = samples_with_returns[0]
-        upper_sample, upper_return = samples_with_returns[-1]
+        # Find bracketing samples for the target return
+        lower_sample = None
+        upper_sample = None
 
-        # Find the best bracketing samples
-        for i in range(len(samples_with_returns) - 1):
-            sample1, return1 = samples_with_returns[i]
-            sample2, return2 = samples_with_returns[i + 1]
-
-            if return1 <= target_return <= return2:
-                lower_sample, lower_return = sample1, return1
-                upper_sample, upper_return = sample2, return2
+        for sample, ret in samples_with_returns:
+            if ret <= target_return:
+                lower_sample = sample
+                lower_return = ret
+            if ret >= target_return and upper_sample is None:
+                upper_sample = sample
+                upper_return = ret
                 break
 
-        # If target is outside the range of existing samples, we can't find it
+        if lower_sample is None or upper_sample is None:
+            return None
+
+        # Check if target is outside the bracketing range
         if target_return < lower_return or target_return > upper_return:
             return None
 
@@ -656,10 +679,16 @@ class BinarySearchSampler:
             try:
                 sample_return = self.extract_return_value(sample)
             except ValueError:
-                # If we can't extract return, skip this sample
-                return None
+                # Can't extract return value, continue search
+                # Assume monotonicity and update bounds based on input
+                if middle_input < (left_input + right_input) / 2:
+                    left_input = middle_input
+                else:
+                    right_input = middle_input
+                iteration_count += 1
+                continue
 
-            # Check if we found a return in the target range
+            # Check if this sample is within the desired range
             if return_min <= sample_return <= return_max:
                 return sample
 
@@ -694,7 +723,8 @@ class BinarySearchSampler:
         if self.return_bins > 0:
             if self.verbose:
                 print(
-                    f"Phase 2: Return gap filling with {self.return_bins} return bins..."
+                    f"Phase 2: Return gap filling with {self.return_bins} return "
+                    "bins..."
                 )
 
             self.fill_return_gaps(afhp_samples)

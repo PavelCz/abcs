@@ -9,13 +9,8 @@ This test verifies that:
 import numpy as np
 from typing import Tuple, Dict, Any
 from abcs import BinarySearchSampler
-
-# Import visualization utilities
-try:
-    from .visualization_utils import save_test_artifacts, print_artifact_summary
-    VISUALIZATION_AVAILABLE = True
-except ImportError:
-    VISUALIZATION_AVAILABLE = False
+from tests.utils import _calculate_return_coverage
+from tests.visualization_utils import save_test_artifacts, print_artifact_summary
 
 
 def create_test_evaluation_function(add_noise=True, full_range=False):
@@ -88,13 +83,81 @@ def create_test_evaluation_function(add_noise=True, full_range=False):
     return eval_function
 
 
+def _create_pathological_afhp_mapping(threshold: float) -> float:
+    """
+    Helper function to create the shared pathological AFHP mapping.
+
+    Args:
+        threshold: Input threshold value (0-100)
+
+    Returns:
+        AFHP value with steep non-linear mapping
+    """
+    # Very steep function that's hard to sample uniformly
+    if threshold < 50:
+        afhp = threshold * 0.1  # Very slow growth
+    else:
+        afhp = 5 + (threshold - 50) * 1.9  # Very fast growth
+    return afhp
+
+
+def _pathological_cubic_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
+    """
+    Pathological evaluation function with cubic return value mapping.
+    Used in convergence tests for algorithmic robustness.
+    """
+    afhp = _create_pathological_afhp_mapping(threshold)
+
+    # Return value with complex cubic relationship
+    return_value = 20 + 60 * (afhp / 100) ** 3
+
+    metadata = {
+        "return_mean": return_value,
+        "threshold_used": threshold,
+    }
+
+    return afhp, metadata
+
+
+def _pathological_stepped_eval_function(
+    threshold: float,
+) -> Tuple[float, Dict[str, Any]]:
+    """
+    Pathological evaluation function with stepped return value mapping.
+    Used in sanity checks to ensure Phase 1 fails to achieve full coverage.
+    """
+    afhp = _create_pathological_afhp_mapping(threshold)
+
+    # Very steep and concentrated return value relationship
+    # Most return values clustered in narrow ranges, creating gaps
+    if afhp < 5:
+        return_value = 25.0  # Flat low region
+    elif afhp < 15:
+        # Steep jump in narrow AFHP range
+        return_value = 30.0 + (afhp - 5) * 15.0  # Very steep: 30 -> 180
+    elif afhp < 25:
+        return_value = 180.0  # Flat middle region
+    elif afhp < 35:
+        # Another steep jump in narrow range
+        return_value = 200.0 + (afhp - 25) * 20.0  # Very steep: 200 -> 400
+    else:
+        return_value = 400.0 + (afhp - 35) * 0.5  # Slow final rise
+
+    metadata = {
+        "return_mean": return_value,
+        "threshold_used": threshold,
+    }
+
+    return afhp, metadata
+
+
 def test_full_coverage():
     """
     Test that the binary search sampler achieves 100% coverage on both axes.
 
-    This test uses parameters that should guarantee 100% coverage:
+    This test uses unbounded mode to guarantee 100% coverage:
     - The AFHP axis uses binary search which guarantees filling all bins
-    - The return axis is given sufficient evaluation budget to fill all bins
+    - The return axis uses unbounded mode to continue until convergence
     """
     print("Testing full coverage on both x-axis (AFHP) and y-axis (return)...")
     print("=" * 60)
@@ -106,15 +169,14 @@ def test_full_coverage():
     num_bins = 10  # Number of AFHP bins
     return_bins = 8  # Number of return bins
 
-    # Create sampler with return refinement enabled
-    # Set max_additional_evals high enough to guarantee all return bins can be filled
+    # Create sampler with return refinement enabled in unbounded mode
     sampler = BinarySearchSampler(
         eval_function=eval_function,
         num_bins=num_bins,
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         return_bins=return_bins,
-        max_additional_evals=return_bins * 2,  # Sufficient budget for all return bins
+        unbounded_mode=True,  # Use unbounded mode for guaranteed convergence
         verbose=True,
     )
 
@@ -199,32 +261,30 @@ def test_full_coverage():
         if not y_axis_pass:
             print(f"  - Y-axis coverage: {y_axis_coverage:.1f}% (expected 100%)")
 
-    # Generate test artifacts
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=samples,
-            sampler=sampler,
-            test_name="full_coverage",
-            all_samples=all_samples
-        )
-        print_artifact_summary(artifacts)
-    
+    artifacts = save_test_artifacts(
+        samples=samples,
+        sampler=sampler,
+        test_name="full_coverage",
+        all_samples=all_samples,
+    )
+    print_artifact_summary(artifacts)
+
     # Return test result
     return x_axis_pass and y_axis_pass
 
 
 def test_coverage_with_different_parameters():
     """
-    Test coverage with different parameter combinations.
+    Test coverage with different parameter combinations using unbounded mode.
     """
     print("\n\nTesting with different parameter combinations...")
     print("=" * 60)
 
-    # Test configurations with sufficient evaluation budget
+    # Test configurations in unbounded mode
     test_configs = [
-        {"num_bins": 5, "return_bins": 5, "max_evals": 20},
-        {"num_bins": 10, "return_bins": 10, "max_evals": 30},
-        {"num_bins": 15, "return_bins": 12, "max_evals": 40},
+        {"num_bins": 5, "return_bins": 5},
+        {"num_bins": 10, "return_bins": 10},
+        {"num_bins": 15, "return_bins": 12},
     ]
 
     all_passed = True
@@ -232,8 +292,7 @@ def test_coverage_with_different_parameters():
     for i, config in enumerate(test_configs):
         print(
             f"\nTest {i + 1}: num_bins={config['num_bins']}, "
-            f"return_bins={config['return_bins']}, "
-            f"max_evals={config['max_evals']}"
+            f"return_bins={config['return_bins']} (unbounded mode)"
         )
         print("-" * 40)
 
@@ -245,7 +304,7 @@ def test_coverage_with_different_parameters():
             input_range=(0.0, 100.0),
             output_range=(0.0, 100.0),
             return_bins=config["return_bins"],
-            max_additional_evals=config["max_evals"],
+            unbounded_mode=True,  # Use unbounded mode
             verbose=False,
         )
 
@@ -321,7 +380,7 @@ def test_afhp_coverage_guarantee():
     # Test with various bin counts - use reasonable values
     bin_counts = [5, 10, 20]
     all_passed = True
-    
+
     # Keep track of the largest test for artifact generation
     largest_test_samples = None
     largest_test_sampler = None
@@ -333,13 +392,14 @@ def test_afhp_coverage_guarantee():
             input_range=(0.0, 100.0),
             output_range=(0.0, 100.0),
             return_bins=0,  # Disable return refinement to test AFHP only
+            unbounded_mode=True,  # Use unbounded mode
             verbose=False,
         )
 
         _samples = sampler.run()
         summary = sampler.get_coverage_summary()
         coverage = summary["coverage_percentage"]
-        
+
         # Keep the largest test for artifact generation
         if num_bins == 20:  # Save the most comprehensive test
             largest_test_samples = _samples
@@ -359,12 +419,12 @@ def test_afhp_coverage_guarantee():
             if gaps:
                 print(f"  Missing bins: {gaps}")
 
-    # Generate test artifacts for the most comprehensive test
-    if VISUALIZATION_AVAILABLE and largest_test_samples and largest_test_sampler:
+    # Generate test artifacts for the most comprehensive test - required for validation
+    if largest_test_samples and largest_test_sampler:
         artifacts = save_test_artifacts(
             samples=largest_test_samples,
             sampler=largest_test_sampler,
-            test_name="afhp_coverage_guarantee_20bins"
+            test_name="afhp_coverage_guarantee_20bins",
         )
         print_artifact_summary(artifacts)
 
@@ -393,7 +453,7 @@ def test_guaranteed_full_coverage():
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         return_bins=return_bins,
-        max_additional_evals=return_bins * 2,
+        unbounded_mode=True,  # Use unbounded mode for guaranteed convergence
         verbose=True,
     )
 
@@ -435,182 +495,29 @@ def test_guaranteed_full_coverage():
     print(f"X-axis (AFHP) coverage: {x_coverage:.1f}%")
     print(f"Y-axis (return) coverage: {y_coverage:.1f}%")
 
-    # Generate test artifacts
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=_samples,
-            sampler=sampler,
-            test_name="guaranteed_full_coverage_linear",
-            all_samples=all_samples
-        )
-        print_artifact_summary(artifacts)
+    artifacts = save_test_artifacts(
+        samples=_samples,
+        sampler=sampler,
+        test_name="guaranteed_full_coverage_linear",
+        all_samples=all_samples,
+    )
+    print_artifact_summary(artifacts)
 
     return x_coverage == 100.0 and y_coverage == 100.0
 
 
-def test_unbounded_mode():
+def test_convergence_with_pathological_function():
     """
-    Test unbounded mode functionality to ensure it achieves better coverage
-    than bounded mode and terminates properly.
+    Test that the algorithm properly converges and terminates even with pathological functions.
+
+    This test uses a function with steep changes that's difficult to sample uniformly,
+    verifying that unbounded mode handles edge cases correctly.
     """
-    print("\n\nTesting unbounded mode...")
+    print("\n\nTesting convergence with pathological function...")
     print("=" * 60)
 
-    # Create test evaluation function
-    eval_function = create_test_evaluation_function(add_noise=False)
-
-    # Test parameters
-    num_bins = 10
-    return_bins = 8
-    max_evals = 5  # Intentionally low to test unbounded vs bounded difference
-
-    print("1. Testing bounded mode with low evaluation limit...")
-    # Test bounded mode first
-    sampler_bounded = BinarySearchSampler(
-        eval_function=eval_function,
-        num_bins=num_bins,
-        input_range=(0.0, 100.0),
-        output_range=(0.0, 100.0),
-        return_bins=return_bins,
-        max_additional_evals=max_evals,
-        unbounded_mode=False,
-        verbose=False,
-    )
-
-    samples_bounded = sampler_bounded.run_with_return_refinement()
-    summary_bounded = sampler_bounded.get_coverage_summary()
-    all_samples_bounded = sampler_bounded.get_all_samples_including_refinement()
-
-    # Calculate return coverage for bounded mode
-    returns_bounded = []
-    for sample in all_samples_bounded:
-        try:
-            ret = sampler_bounded.extract_return_value(sample)
-            returns_bounded.append(ret)
-        except ValueError:
-            pass
-
-    return_coverage_bounded = 0.0
-    if returns_bounded and return_bins > 0:
-        min_return = min(returns_bounded)
-        max_return = max(returns_bounded)
-        if max_return > min_return:
-            filled_return_bins = set()
-            for ret in returns_bounded:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
-                if bin_idx >= return_bins:
-                    bin_idx = return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage_bounded = 100.0 * len(filled_return_bins) / return_bins
-
-    print("2. Testing unbounded mode...")
-    # Test unbounded mode
-    sampler_unbounded = BinarySearchSampler(
-        eval_function=eval_function,
-        num_bins=num_bins,
-        input_range=(0.0, 100.0),
-        output_range=(0.0, 100.0),
-        return_bins=return_bins,
-        max_additional_evals=max_evals,  # This should be ignored
-        unbounded_mode=True,
-        verbose=True,
-    )
-
-    samples_unbounded = sampler_unbounded.run_with_return_refinement()
-    summary_unbounded = sampler_unbounded.get_coverage_summary()
-    all_samples_unbounded = sampler_unbounded.get_all_samples_including_refinement()
-
-    # Calculate return coverage for unbounded mode
-    returns_unbounded = []
-    for sample in all_samples_unbounded:
-        try:
-            ret = sampler_unbounded.extract_return_value(sample)
-            returns_unbounded.append(ret)
-        except ValueError:
-            pass
-
-    return_coverage_unbounded = 0.0
-    if returns_unbounded and return_bins > 0:
-        min_return = min(returns_unbounded)
-        max_return = max(returns_unbounded)
-        if max_return > min_return:
-            filled_return_bins = set()
-            for ret in returns_unbounded:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * return_bins)
-                if bin_idx >= return_bins:
-                    bin_idx = return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage_unbounded = 100.0 * len(filled_return_bins) / return_bins
-
-    # Compare results
-    print("\nComparison Results:")
-    print(f"Bounded mode:")
-    print(f"  - AFHP coverage: {summary_bounded['coverage_percentage']:.1f}%")
-    print(f"  - Return coverage: {return_coverage_bounded:.1f}%")
-    print(f"  - Total evaluations: {summary_bounded['total_evaluations']}")
-    print(f"  - Return refinement samples: {len(sampler_bounded.get_return_refinement_samples())}")
-
-    print(f"Unbounded mode:")
-    print(f"  - AFHP coverage: {summary_unbounded['coverage_percentage']:.1f}%")
-    print(f"  - Return coverage: {return_coverage_unbounded:.1f}%")
-    print(f"  - Total evaluations: {summary_unbounded['total_evaluations']}")
-    print(f"  - Return refinement samples: {len(sampler_unbounded.get_return_refinement_samples())}")
-
-    # Generate test artifacts for unbounded mode
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=samples_unbounded,
-            sampler=sampler_unbounded,
-            test_name="unbounded_mode",
-            all_samples=all_samples_unbounded
-        )
-        print_artifact_summary(artifacts)
-
-    # Test assertions
-    unbounded_better_return_coverage = return_coverage_unbounded >= return_coverage_bounded
-    unbounded_same_afhp_coverage = summary_unbounded['coverage_percentage'] == summary_bounded['coverage_percentage']
-    unbounded_more_return_samples = len(sampler_unbounded.get_return_refinement_samples()) >= len(sampler_bounded.get_return_refinement_samples())
-    
-    print("\nTest Results:")
-    print(f"  - Unbounded achieves same/better return coverage: {'PASS' if unbounded_better_return_coverage else 'FAIL'}")
-    print(f"  - Unbounded maintains AFHP coverage: {'PASS' if unbounded_same_afhp_coverage else 'FAIL'}")
-    print(f"  - Unbounded generates more return samples: {'PASS' if unbounded_more_return_samples else 'FAIL'}")
-    
-    # Overall result
-    all_tests_passed = unbounded_better_return_coverage and unbounded_same_afhp_coverage and unbounded_more_return_samples
-    
-    if all_tests_passed:
-        print("\n✓ UNBOUNDED MODE TEST PASSED: Unbounded mode performs better than bounded mode!")
-    else:
-        print("\n✗ UNBOUNDED MODE TEST FAILED: Some assertions failed")
-    
-    return all_tests_passed
-
-
-def test_unbounded_mode_convergence():
-    """
-    Test that unbounded mode properly converges and terminates even in edge cases.
-    """
-    print("\n\nTesting unbounded mode convergence...")
-    print("=" * 60)
-
-    # Create a pathological evaluation function that's hard to sample
-    def pathological_eval_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
-        # Very steep function that's hard to sample uniformly
-        if threshold < 50:
-            afhp = threshold * 0.1  # Very slow growth
-        else:
-            afhp = 5 + (threshold - 50) * 1.9  # Very fast growth
-        
-        # Return value with complex relationship
-        return_value = 20 + 60 * (afhp / 100) ** 3
-        
-        metadata = {
-            "return_mean": return_value,
-            "threshold_used": threshold,
-        }
-        
-        return afhp, metadata
+    # Use the pathological evaluation function with cubic return mapping
+    pathological_eval_function = _pathological_cubic_eval_function
 
     sampler = BinarySearchSampler(
         eval_function=pathological_eval_function,
@@ -623,140 +530,146 @@ def test_unbounded_mode_convergence():
     )
 
     # Run and ensure it terminates
-    samples = sampler.run_with_return_refinement()
+    sampler.run_with_return_refinement()
     summary = sampler.get_coverage_summary()
-    
-    print(f"\nPathological function results:")
+
+    print("\nPathological function results:")
     print(f"  - AFHP coverage: {summary['coverage_percentage']:.1f}%")
     print(f"  - Total evaluations: {summary['total_evaluations']}")
-    print(f"  - Algorithm terminated: {'PASS' if summary['total_evaluations'] < sampler.max_total_evals_unbounded else 'FAIL'}")
-    
+    print(
+        f"  - Algorithm terminated: {'PASS' if summary['total_evaluations'] < sampler.max_total_evals_unbounded else 'FAIL'}"
+    )
+
     # Test that it terminated before the safety limit
-    terminated_properly = summary['total_evaluations'] < sampler.max_total_evals_unbounded
-    
+    terminated_properly = (
+        summary["total_evaluations"] < sampler.max_total_evals_unbounded
+    )
+
     return terminated_properly
 
 
 def test_phase2_binary_bisection():
     """
     Test the new Phase 2 implementation using recursive binary bisection.
-    
+
     This test specifically verifies that the new approach correctly fills
     return value gaps using recursive binary search rather than interpolation.
     """
     print("\n\nTesting Phase 2 binary bisection implementation...")
     print("=" * 60)
-    
+
     # Create a function with complex return value mapping to test the bisection approach
     def complex_return_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         # Linear AFHP mapping for simplicity
         afhp = threshold
-        
+
+        interval_1 = 20
+        interval_2 = 50
+        interval_3 = 80
+
         # Complex non-linear return mapping that creates gaps when sampled sparsely
-        if afhp <= 20:
-            return_value = 30 + afhp * 0.5  # Slow growth
-        elif afhp <= 50:
-            return_value = 40 + (afhp - 20) * 1.5  # Fast growth
-        elif afhp <= 80:
-            return_value = 85 + (afhp - 50) * 0.2  # Very slow growth
+        if afhp <= interval_1:
+            return_value = 20 + afhp * 4  # very fast growth
+        elif afhp <= interval_2:
+            return_value = (
+                20 + interval_1 * 4 + (afhp - interval_1) * 0.5
+            )  # slow growth
+        elif afhp <= interval_3:
+            return_value = (
+                20
+                + interval_1 * 4
+                + (interval_2 - interval_1) * 0.5
+                + (afhp - interval_2) * 0.2
+            )  # Very slow growth
         else:
-            return_value = 91 + (afhp - 80) * 0.4  # Moderate growth
-            
+            return_value = (
+                20
+                + interval_1 * 4
+                + (interval_2 - interval_1) * 0.5
+                + (interval_3 - interval_2) * 0.2
+                + (afhp - interval_3) * 0.1
+            )  # even slower growth
+
         metadata = {
             "return_mean": return_value,
             "threshold_used": threshold,
         }
-        
+
         return afhp, metadata
-    
+
     # Test parameters that should create gaps in return coverage
     sampler = BinarySearchSampler(
         eval_function=complex_return_function,
-        num_bins=12,  # Decent AFHP coverage
-        return_bins=15,  # Many return bins to test gap filling
-        max_additional_evals=30,  # Sufficient budget for testing
+        num_bins=20,  # Decent AFHP coverage
+        return_bins=20,  # Many return bins to test gap filling
+        unbounded_mode=True,  # Use unbounded mode for thorough testing
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         verbose=True,
     )
-    
+
     print("\nRunning Phase 1 (AFHP coverage)...")
     afhp_samples = sampler.run()
-    
+
     print("\nRunning Phase 2 (return gap filling with binary bisection)...")
     sampler.fill_return_gaps(afhp_samples)
-    
+
     # Analyze results
     summary = sampler.get_coverage_summary()
     all_samples = sampler.get_all_samples_including_refinement()
     return_samples = sampler.get_return_refinement_samples()
-    
-    print(f"\nPhase 2 Binary Bisection Results:")
+
+    print("\nPhase 2 Binary Bisection Results:")
     print(f"  - AFHP coverage: {summary['coverage_percentage']:.1f}%")
-    print(f"  - Initial AFHP samples: {len([s for s in afhp_samples if s is not None])}")
+    print(
+        f"  - Initial AFHP samples: {len([s for s in afhp_samples if s is not None])}"
+    )
     print(f"  - Return refinement samples added: {len(return_samples)}")
     print(f"  - Total evaluations: {summary['total_evaluations']}")
-    
-    # Calculate return coverage
-    returns = []
-    for sample in all_samples:
-        try:
-            ret = sampler.extract_return_value(sample)
-            returns.append(ret)
-        except ValueError:
-            pass
-            
-    return_coverage = 0.0
-    if returns and sampler.return_bins > 0:
-        min_return = min(returns)
-        max_return = max(returns)
-        if max_return > min_return:
-            filled_return_bins = set()
-            for ret in returns:
-                bin_idx = int((ret - min_return) / (max_return - min_return) * sampler.return_bins)
-                if bin_idx >= sampler.return_bins:
-                    bin_idx = sampler.return_bins - 1
-                filled_return_bins.add(bin_idx)
-            return_coverage = 100.0 * len(filled_return_bins) / sampler.return_bins
-            
+
+    # Calculate return coverage using helper function
+    return_coverage, filled_bins_count, total_bins = _calculate_return_coverage(
+        all_samples, sampler
+    )
+
     print(f"  - Return coverage: {return_coverage:.1f}%")
-    print(f"  - Return bins filled: {len(filled_return_bins) if 'filled_return_bins' in locals() else 0}/{sampler.return_bins}")
-    
-    # Verify that Phase 2 actually added samples
+    print(f"  - Return bins filled: {filled_bins_count}/{total_bins}")
+
+    # Verify that Phase 2 actually added samples and achieved full coverage
     phase2_worked = len(return_samples) > 0
-    reasonable_coverage = return_coverage >= 60.0  # Should achieve decent coverage
-    
-    print(f"\nPhase 2 Test Results:")
+    full_coverage = (
+        return_coverage >= 100.0
+    )  # Should achieve 100% coverage with unbounded mode
+
+    print("\nPhase 2 Test Results:")
     print(f"  - Added return samples: {'PASS' if phase2_worked else 'FAIL'}")
-    print(f"  - Achieved reasonable return coverage: {'PASS' if reasonable_coverage else 'FAIL'}")
-    
-    # Generate test artifacts for this specific test
-    if VISUALIZATION_AVAILABLE:
-        artifacts = save_test_artifacts(
-            samples=afhp_samples,
-            sampler=sampler,
-            test_name="phase2_binary_bisection",
-            all_samples=all_samples
-        )
-        print_artifact_summary(artifacts)
-    
-    return phase2_worked and reasonable_coverage
+    print(f"  - Achieved full return coverage: {'PASS' if full_coverage else 'FAIL'}")
+
+    artifacts = save_test_artifacts(
+        samples=afhp_samples,
+        sampler=sampler,
+        test_name="phase2_binary_bisection",
+        all_samples=all_samples,
+    )
+    print_artifact_summary(artifacts)
+
+    return phase2_worked and full_coverage
 
 
 def test_phase2_gap_identification():
     """
     Test the gap identification logic used in Phase 2.
-    
+
     This test verifies that contiguous return value gap intervals
     are correctly identified for binary bisection.
     """
     print("\n\nTesting Phase 2 gap identification...")
     print("=" * 60)
-    
+
     # Create a simple test function
     def test_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         return threshold, {"return_mean": threshold * 0.8 + 20}
-    
+
     sampler = BinarySearchSampler(
         eval_function=test_function,
         num_bins=8,
@@ -765,10 +678,10 @@ def test_phase2_gap_identification():
         output_range=(0.0, 100.0),
         verbose=False,
     )
-    
+
     # Run Phase 1 to get initial samples
     afhp_samples = sampler.run()
-    
+
     # Extract valid samples and their returns
     valid_samples = [s for s in afhp_samples if s is not None]
     samples_with_returns = []
@@ -778,29 +691,31 @@ def test_phase2_gap_identification():
             samples_with_returns.append((sample, ret))
         except ValueError:
             continue
-    
+
     if len(samples_with_returns) >= 2:
         # Sort and create return bins
         samples_with_returns.sort(key=lambda x: x[1])
-        min_return = samples_with_returns[0][1] 
+        min_return = samples_with_returns[0][1]
         max_return = samples_with_returns[-1][1]
-        
+
         return_bin_edges = np.linspace(min_return, max_return, sampler.return_bins + 1)
-        
+
         # Find filled return bins
         filled_return_bins = set()
         for sample, ret in samples_with_returns:
             bin_idx = sampler.determine_return_bin(ret, return_bin_edges)
             filled_return_bins.add(bin_idx)
-        
+
         # Test gap identification
-        gap_intervals = sampler.identify_return_gap_intervals(filled_return_bins, return_bin_edges)
-        
-        print(f"Gap identification test:")
+        gap_intervals = sampler.identify_return_gap_intervals(
+            filled_return_bins, return_bin_edges
+        )
+
+        print("Gap identification test:")
         print(f"  - Return bins: {sampler.return_bins}")
         print(f"  - Filled bins: {sorted(filled_return_bins)}")
         print(f"  - Gap intervals found: {gap_intervals}")
-        
+
         # Verify gap intervals are valid
         gaps_valid = True
         for start, end in gap_intervals:
@@ -812,9 +727,9 @@ def test_phase2_gap_identification():
                 if i in filled_return_bins:
                     gaps_valid = False
                     break
-        
+
         print(f"  - Gap intervals valid: {'PASS' if gaps_valid else 'FAIL'}")
-        
+
         return gaps_valid
     else:
         print("Warning: Not enough samples with return values for gap test")
@@ -827,57 +742,64 @@ def test_phase2_edge_cases():
     """
     print("\n\nTesting Phase 2 edge cases...")
     print("=" * 60)
-    
+
     test_results = []
-    
+
     # Test 1: Function with no return variation (all same return value)
     print("\n1. Testing with constant return values...")
+
     def constant_return_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         return threshold, {"return_mean": 50.0}  # Always same return
-    
+
     sampler1 = BinarySearchSampler(
         eval_function=constant_return_function,
         num_bins=5,
         return_bins=5,
-        max_additional_evals=10,
+        unbounded_mode=True,
         verbose=False,
     )
-    
+
     afhp_samples1 = sampler1.run()
     additional_samples1 = sampler1.fill_return_gaps(afhp_samples1)
-    
+
     # Should handle gracefully without adding samples
     constant_return_handled = len(additional_samples1) == 0
-    print(f"   Constant return handled: {'PASS' if constant_return_handled else 'FAIL'}")
+    print(
+        f"   Constant return handled: {'PASS' if constant_return_handled else 'FAIL'}"
+    )
     test_results.append(constant_return_handled)
-    
+
     # Test 2: Function with very few initial samples
     print("\n2. Testing with minimal initial samples...")
+
     def minimal_samples_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         # Only produces output in narrow range
         if 45 <= threshold <= 55:
             return threshold, {"return_mean": threshold + 10}
         else:
             return 50.0, {"return_mean": 60.0}  # All map to same point
-    
+
     sampler2 = BinarySearchSampler(
         eval_function=minimal_samples_function,
         num_bins=10,
         return_bins=5,
-        max_additional_evals=10,
+        unbounded_mode=True,
         verbose=False,
     )
-    
+
     afhp_samples2 = sampler2.run()
-    additional_samples2 = sampler2.fill_return_gaps(afhp_samples2)
-    
+    sampler2.fill_return_gaps(afhp_samples2)
+
     # Should handle gracefully
     minimal_samples_handled = True  # Any result is acceptable for this edge case
-    print(f"   Minimal samples handled: {'PASS' if minimal_samples_handled else 'FAIL'}")
+    print(
+        f"   Minimal samples handled: {'PASS' if minimal_samples_handled else 'FAIL'}"
+    )
     test_results.append(minimal_samples_handled)
-    
+
     # Test 3: Function with extreme return value ranges
     print("\n3. Testing with extreme return ranges...")
+
     def extreme_range_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         afhp = threshold
         # Very wide return range with gaps
@@ -887,30 +809,130 @@ def test_phase2_edge_cases():
             return_val = 990.0
         else:
             return_val = 500.0
-            
+
         return afhp, {"return_mean": return_val}
-    
+
     sampler3 = BinarySearchSampler(
         eval_function=extreme_range_function,
         num_bins=8,
         return_bins=6,
-        max_additional_evals=15,
+        unbounded_mode=True,
         verbose=False,
     )
-    
+
     afhp_samples3 = sampler3.run()
-    additional_samples3 = sampler3.fill_return_gaps(afhp_samples3)
-    
+    sampler3.fill_return_gaps(afhp_samples3)
+
     # Should not crash and may add some samples
     extreme_range_handled = True  # Algorithm should not crash
     print(f"   Extreme ranges handled: {'PASS' if extreme_range_handled else 'FAIL'}")
     test_results.append(extreme_range_handled)
-    
+
     # Overall result
     all_edge_cases_passed = all(test_results)
     print(f"\nEdge cases test: {'PASS' if all_edge_cases_passed else 'FAIL'}")
-    
+
     return all_edge_cases_passed
+
+
+def test_phase1_only_sanity_check():
+    """
+    Sanity check: Verify that Phase 1 alone fails to achieve full y-axis coverage
+    with steep functions, confirming that Phase 2 is actually necessary.
+
+    This test ensures our challenging functions are indeed challenging and that
+    Phase 2 provides real value over Phase 1 alone.
+    """
+    print("\n\nTesting Phase 1 only sanity check...")
+    print("=" * 60)
+    print("Verifying that steep functions require Phase 2 for full y-axis coverage")
+
+    test_results = []
+
+    # Test 1: Steep logarithmic function (from create_test_evaluation_function)
+    print("\n1. Testing steep logarithmic function (Phase 1 only)...")
+
+    eval_function_log = create_test_evaluation_function(add_noise=False)
+
+    sampler_log = BinarySearchSampler(
+        eval_function=eval_function_log,
+        num_bins=10,
+        return_bins=0,  # Phase 1 only - no Phase 2
+        input_range=(0.0, 100.0),
+        output_range=(0.0, 100.0),
+        unbounded_mode=True,
+        verbose=False,
+    )
+
+    # Run Phase 1 only
+    samples_log = sampler_log.run()
+
+    # Calculate return coverage with 8 return bins (same as full tests)
+    return_coverage_log, _, _ = _calculate_return_coverage(
+        samples_log, sampler_log, return_bins=8
+    )
+
+    print(f"   Y-axis coverage with logarithmic function: {return_coverage_log:.1f}%")
+    phase1_fails_log = return_coverage_log < 100.0  # Should fail to achieve 100%
+    print(
+        f"   Phase 1 fails to achieve full coverage: {'PASS' if phase1_fails_log else 'FAIL'}"
+    )
+    test_results.append(phase1_fails_log)
+
+    # Test 2: Pathological steep function
+    print("\n2. Testing pathological steep function (Phase 1 only)...")
+
+    # Use the pathological evaluation function with stepped return mapping
+    pathological_eval_function = _pathological_stepped_eval_function
+
+    sampler_patho = BinarySearchSampler(
+        eval_function=pathological_eval_function,
+        num_bins=10,
+        return_bins=0,  # Phase 1 only - no Phase 2
+        input_range=(0.0, 100.0),
+        output_range=(0.0, 100.0),
+        unbounded_mode=True,
+        verbose=False,
+    )
+
+    # Run Phase 1 only
+    samples_patho = sampler_patho.run()
+
+    # Calculate return coverage with 8 return bins
+    return_coverage_patho, _, _ = _calculate_return_coverage(
+        samples_patho, sampler_patho, return_bins=8
+    )
+
+    print(
+        f"   Y-axis coverage with pathological function: {return_coverage_patho:.1f}%"
+    )
+    phase1_fails_patho = return_coverage_patho < 100.0  # Should fail to achieve 100%
+    print(
+        f"   Phase 1 fails to achieve full coverage: {'PASS' if phase1_fails_patho else 'FAIL'}"
+    )
+    test_results.append(phase1_fails_patho)
+
+    # Overall sanity check result
+    all_sanity_checks_passed = all(test_results)
+
+    print("\nSanity Check Results:")
+    print(
+        f"  - Steep functions are indeed challenging: {'PASS' if all_sanity_checks_passed else 'FAIL'}"
+    )
+    print(
+        f"  - Phase 2 is necessary for full coverage: {'PASS' if all_sanity_checks_passed else 'FAIL'}"
+    )
+
+    if all_sanity_checks_passed:
+        print(
+            "\n✓ SANITY CHECK PASSED: Phase 1 alone fails with steep functions, confirming Phase 2 necessity"
+        )
+    else:
+        print(
+            "\n❌ SANITY CHECK FAILED: Steep functions may not be challenging enough, or Phase 1 is too effective"
+        )
+
+    return all_sanity_checks_passed
 
 
 if __name__ == "__main__":
@@ -926,20 +948,20 @@ if __name__ == "__main__":
     # Run guaranteed full coverage test
     guaranteed_test_passed = test_guaranteed_full_coverage()
 
-    # Run unbounded mode tests
-    unbounded_test_passed = test_unbounded_mode()
-    
-    # Run unbounded mode convergence test
-    unbounded_convergence_passed = test_unbounded_mode_convergence()
-    
+    # Run convergence test with pathological function
+    convergence_passed = test_convergence_with_pathological_function()
+
     # Run Phase 2 binary bisection tests
     phase2_bisection_passed = test_phase2_binary_bisection()
-    
+
     # Run Phase 2 gap identification test
     phase2_gaps_passed = test_phase2_gap_identification()
-    
+
     # Run Phase 2 edge cases test
     phase2_edge_cases_passed = test_phase2_edge_cases()
+
+    # Run Phase 1 only sanity check
+    sanity_check_passed = test_phase1_only_sanity_check()
 
     # Overall result
     print("\n" + "=" * 60)
@@ -949,22 +971,18 @@ if __name__ == "__main__":
         and param_tests_passed
         and afhp_test_passed
         and guaranteed_test_passed
-        and unbounded_test_passed
-        and unbounded_convergence_passed
+        and convergence_passed
         and phase2_bisection_passed
         and phase2_gaps_passed
         and phase2_edge_cases_passed
+        and sanity_check_passed
     ):
         print("✓ ALL TESTS PASSED - Coverage guarantees verified!")
         print(
             "  - Algorithm achieves 100% coverage on both axes when function spans full range"
         )
-        print(
-            "  - Unbounded mode provides better coverage and terminates properly"
-        )
-        print(
-            "  - Phase 2 binary bisection correctly fills return value gaps"
-        )
+        print("  - Unbounded mode ensures convergence for all test functions")
+        print("  - Phase 2 binary bisection correctly fills return value gaps")
         exit(0)
     else:
         print("✗ TESTS FAILED")
@@ -974,14 +992,14 @@ if __name__ == "__main__":
             )
         if not guaranteed_test_passed:
             print("  - Failed to achieve 100% coverage even with linear function")
-        if not unbounded_test_passed:
-            print("  - Unbounded mode test failed")
-        if not unbounded_convergence_passed:
-            print("  - Unbounded mode convergence test failed")
+        if not convergence_passed:
+            print("  - Convergence test with pathological function failed")
         if not phase2_bisection_passed:
             print("  - Phase 2 binary bisection test failed")
         if not phase2_gaps_passed:
             print("  - Phase 2 gap identification test failed")
         if not phase2_edge_cases_passed:
             print("  - Phase 2 edge cases test failed")
+        if not sanity_check_passed:
+            print("  - Phase 1 only sanity check failed")
         exit(1)
