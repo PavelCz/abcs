@@ -71,10 +71,7 @@ class BinarySearchSampler:
         self.max_additional_evals = max_additional_evals
         self.unbounded_mode = unbounded_mode
         self.return_value_function = return_value_function
-        if return_value_function is None and return_bins > 0:
-            raise ValueError(
-                "return_value_function must be provided if return_bins > 0"
-            )
+        # Note: return_value_function is optional - extract_return_value has fallback logic
 
         # Safety limit for unbounded mode (prevent infinite loops)
         self.max_total_evals_unbounded = 10000
