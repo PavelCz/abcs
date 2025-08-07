@@ -72,7 +72,7 @@ class BinarySearchSampler:
             )
 
         # Safety limit to prevent infinite loops
-        self.max_total_evals = 10000
+        self.max_total_evals = 200
 
         # Initialize bins
         self.bin_edges: NDArray[np.float64] = np.linspace(
@@ -214,7 +214,6 @@ class BinarySearchSampler:
             filled_return_bins.add(bin_idx)
 
         additional_samples = []
-        total_evals = 0
 
         # Continue until all return bins are filled
         while len(filled_return_bins) < self.return_bins:
@@ -281,9 +280,7 @@ class BinarySearchSampler:
                     filled_return_bins,
                     return_bin_edges,
                     additional_samples,
-                    total_evals,
                 )
-                total_evals += evals
 
                 if len(filled_return_bins) > before_fill_count:
                     made_progress = True
@@ -513,7 +510,6 @@ class BinarySearchSampler:
         filled_return_bins: set,
         return_bin_edges: NDArray[np.float64],
         additional_samples: List[SamplePoint],
-        iteration_count: int = 0,
     ) -> int:
         """
         Recursively fill return bins using binary search.
@@ -526,12 +522,11 @@ class BinarySearchSampler:
             filled_return_bins: Set of already filled bin indices
             return_bin_edges: Array of return bin edges
             additional_samples: List to append new samples to
-            iteration_count: Current iteration count for safety checks
 
         Returns:
             Number of evaluations performed
         """
-        # Check convergence criteria using the generic method
+        # Safety check
         self._check_safety()
 
         # Calculate middle input value
@@ -567,7 +562,6 @@ class BinarySearchSampler:
                 filled_return_bins,
                 return_bin_edges,
                 additional_samples,
-                iteration_count + evals,
             )
 
         if self.return_bins_remaining(middle_bin, right_return_bin, filled_return_bins):
@@ -579,7 +573,6 @@ class BinarySearchSampler:
                 filled_return_bins,
                 return_bin_edges,
                 additional_samples,
-                iteration_count + evals,
             )
 
         return evals
