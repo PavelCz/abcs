@@ -36,6 +36,7 @@ class BinarySearchSampler:
         input_to_threshold: Optional[Callable[[float], float]] = None,
         verbose: bool = True,
         return_bins: int = 0,
+        return_value_function: Optional[Callable[[Dict[str, Any]], float]] = None,
         max_additional_evals: int = 20,
         unbounded_mode: bool = False,
     ):
@@ -52,6 +53,8 @@ class BinarySearchSampler:
                                to actual thresholds for evaluation
             verbose: Whether to print progress messages
             return_bins: Number of return bins for curve smoothing (0 = disabled)
+            return_value_function: Function to extract return value from sample 
+                metadata. Only used if return_bins > 0.
             max_additional_evals: Maximum additional evaluations for return refinement
                                  (ignored when unbounded_mode=True)
             unbounded_mode: If True, removes evaluation limits and continues until
@@ -67,6 +70,11 @@ class BinarySearchSampler:
         self.return_bins = return_bins
         self.max_additional_evals = max_additional_evals
         self.unbounded_mode = unbounded_mode
+        self.return_value_function = return_value_function
+        if return_value_function is None and return_bins > 0:
+            raise ValueError(
+                "return_value_function must be provided if return_bins > 0"
+            )
 
         # Safety limit for unbounded mode (prevent infinite loops)
         self.max_total_evals_unbounded = 10000
@@ -167,7 +175,7 @@ class BinarySearchSampler:
             List of additional samples to fill return gaps
         """
         if self.return_bins == 0:
-            return []
+            raise ValueError("Called fill_return_gaps with return_bins=0")
 
         # Extract valid samples and their returns
         valid_samples = [s for s in initial_samples if s is not None]
@@ -177,16 +185,11 @@ class BinarySearchSampler:
         # Build list of samples with their return values
         samples_with_returns = []
         for sample in valid_samples:
-            try:
-                ret = self.extract_return_value(sample)
-                samples_with_returns.append((sample, ret))
-            except ValueError:
-                continue
+            ret = self.return_value_function(sample.metadata)
+            samples_with_returns.append((sample, ret))
 
-        if len(samples_with_returns) < 2:
-            if self.verbose:
-                print("Warning: Could not extract enough return values for gap filling")
-            return []
+        if len(samples_with_returns) != len(valid_samples):
+            raise ValueError("Could not extract return values for all samples")
 
         # Sort samples by return value
         samples_with_returns.sort(key=lambda x: x[1])
@@ -365,6 +368,8 @@ class BinarySearchSampler:
         """Extract return value from sample metadata."""
         # Try different possible keys for return value
         metadata = sample.metadata
+
+
         if "summary" in metadata:
             summary = metadata["summary"]
             if isinstance(summary, dict):
