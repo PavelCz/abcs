@@ -53,7 +53,7 @@ class BinarySearchSampler:
                                to actual thresholds for evaluation
             verbose: Whether to print progress messages
             return_bins: Number of return bins for curve smoothing (0 = disabled)
-            return_value_function: Function to extract return value from sample 
+            return_value_function: Function to extract return value from sample
                 metadata. Only used if return_bins > 0.
             max_additional_evals: Maximum additional evaluations for return refinement
                                  (ignored when unbounded_mode=True)
@@ -91,29 +91,29 @@ class BinarySearchSampler:
     ) -> int:
         """
         Generic method to determine which bin a value falls into.
-        
+
         Args:
             value: The value to bin
             bin_edges: Array of bin edge values
             num_bins: Total number of bins
-            
+
         Returns:
             Bin index (0 to num_bins-1)
         """
         min_val = bin_edges[0]
         max_val = bin_edges[-1]
-        
+
         # Handle edge cases
         if value <= min_val:
             return 0
         if value >= max_val:
             return num_bins - 1
-            
+
         # Find the appropriate bin
         for i in range(len(bin_edges) - 1):
             if bin_edges[i] <= value < bin_edges[i + 1]:
                 return i
-                
+
         # This should not happen, but default to last bin
         return num_bins - 1
 
@@ -122,19 +122,19 @@ class BinarySearchSampler:
     ) -> bool:
         """
         Generic method to check if there are empty bins in the given range.
-        
+
         Args:
             left_idx: Left boundary index
-            right_idx: Right boundary index  
+            right_idx: Right boundary index
             filled_bins: Set of filled bin indices (or None-check for Phase 1)
             exclusive: If True, exclude boundaries (Phase 1 style); if False, include (Phase 2 style)
-            
+
         Returns:
             True if there are empty bins in the range
         """
         start = left_idx + 1 if exclusive else left_idx
         end = right_idx if exclusive else right_idx + 1
-        
+
         for i in range(start, end):
             if isinstance(filled_bins, set):
                 # Phase 2 style: check set membership
@@ -145,18 +145,18 @@ class BinarySearchSampler:
                 if i < len(filled_bins) and filled_bins[i] is None:
                     return True
         return False
-    
+
     def _check_convergence(
         self, left_value: float, right_value: float, iteration_count: int
     ) -> bool:
         """
         Check if binary search should terminate based on convergence criteria.
-        
+
         Args:
             left_value: Left boundary value
             right_value: Right boundary value
             iteration_count: Current iteration count
-            
+
         Returns:
             True if search should terminate
         """
@@ -165,18 +165,20 @@ class BinarySearchSampler:
             # In unbounded mode, check safety limit
             if self.total_evals >= self.max_total_evals_unbounded:
                 if self.verbose:
-                    print(f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations")
+                    print(
+                        f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations"
+                    )
                 return True
         else:
             # In bounded mode, check iteration limit
             if iteration_count >= self.max_additional_evals:
                 return True
-        
+
         # Check precision threshold
         precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
         if abs(right_value - left_value) < precision_threshold:
             return True
-            
+
         return False
 
     def run_with_return_refinement(self) -> List[Optional[SamplePoint]]:
@@ -249,11 +251,11 @@ class BinarySearchSampler:
     ) -> List[SamplePoint]:
         """
         Fill gaps in return values using recursive binary search (Phase 2).
-        
+
         This method implements the improved Phase 2 algorithm that uses recursive
         binary bisection to systematically fill gaps in return value coverage.
         Unlike the previous interpolation-based approach, this method:
-        
+
         1. Identifies contiguous intervals of empty return bins
         2. Finds samples that bracket each gap interval
         3. Applies recursive binary search within each interval
@@ -284,12 +286,12 @@ class BinarySearchSampler:
                 except ValueError:
                     continue
             samples_with_returns.append((sample, ret))
-                
+
         if len(samples_with_returns) < 2:
             if self.verbose:
                 print("Warning: Could not extract enough return values for gap filling")
             return []
-            
+
         # Sort samples by return value
         samples_with_returns.sort(key=lambda x: x[1])
         min_return = samples_with_returns[0][1]
@@ -310,54 +312,74 @@ class BinarySearchSampler:
             filled_return_bins.add(bin_idx)
 
         # Identify contiguous gap intervals
-        gap_intervals = self.identify_return_gap_intervals(filled_return_bins, return_bin_edges)
-        
+        gap_intervals = self.identify_return_gap_intervals(
+            filled_return_bins, return_bin_edges
+        )
+
         if self.verbose and gap_intervals:
-            mode_text = "unbounded mode" if self.unbounded_mode else f"max {self.max_additional_evals} evals"
-            print(f"Found {len(gap_intervals)} return gap intervals to fill ({mode_text})")
+            mode_text = (
+                "unbounded mode"
+                if self.unbounded_mode
+                else f"max {self.max_additional_evals} evals"
+            )
+            print(
+                f"Found {len(gap_intervals)} return gap intervals to fill ({mode_text})"
+            )
             for start, end in gap_intervals:
-                print(f"  Gap interval: bins {start}-{end} (return values {return_bin_edges[start]:.2f}-{return_bin_edges[end+1]:.2f})")
+                print(
+                    f"  Gap interval: bins {start}-{end} (return values {return_bin_edges[start]:.2f}-{return_bin_edges[end + 1]:.2f})"
+                )
 
         # Fill gaps using recursive binary search
         additional_samples = []
         total_evals = 0
-        
+
         for gap_start, gap_end in gap_intervals:
             # Find samples that bracket this gap interval
             left_sample = None
             right_sample = None
-            
+
             # Find the best bracketing samples for this gap
             for i, (sample, ret) in enumerate(samples_with_returns):
                 sample_bin = self.determine_return_bin(ret, return_bin_edges)
-                
+
                 # Update left bracket if this sample is to the left of the gap
                 if sample_bin < gap_start:
                     left_sample = sample
-                    
+
                 # Set right bracket if this sample is to the right of the gap
                 if sample_bin > gap_end and right_sample is None:
                     right_sample = sample
                     break
-            
+
             # If we can't bracket the gap, skip it
             if left_sample is None or right_sample is None:
                 if self.verbose:
-                    print(f"  Cannot bracket gap interval {gap_start}-{gap_end}, skipping")
+                    print(
+                        f"  Cannot bracket gap interval {gap_start}-{gap_end}, skipping"
+                    )
                 continue
-                
+
             # Apply recursive binary search to fill this gap interval
             if self.verbose:
-                print(f"  Filling gap interval {gap_start}-{gap_end} using binary search")
-                
+                print(
+                    f"  Filling gap interval {gap_start}-{gap_end} using binary search"
+                )
+
             evals = self.binary_search_return_gaps(
-                left_sample, right_sample, gap_start, gap_end,
-                filled_return_bins, return_bin_edges, additional_samples, total_evals
+                left_sample,
+                right_sample,
+                gap_start,
+                gap_end,
+                filled_return_bins,
+                return_bin_edges,
+                additional_samples,
+                total_evals,
             )
             total_evals += evals
-            
+
             # Update samples list with new samples for better bracketing in next intervals
-            for new_sample in additional_samples[len(samples_with_returns):]:
+            for new_sample in additional_samples[len(samples_with_returns) :]:
                 try:
                     new_ret = self.extract_return_value(new_sample)
                     samples_with_returns.append((new_sample, new_ret))
@@ -435,10 +457,10 @@ class BinarySearchSampler:
         # If return_value_function is provided, use it
         if self.return_value_function:
             return self.return_value_function(sample.metadata)
-        
+
         # Otherwise use fallback logic for backward compatibility
         metadata = sample.metadata
-        
+
         if "summary" in metadata:
             summary = metadata["summary"]
             if isinstance(summary, dict):
@@ -461,7 +483,9 @@ class BinarySearchSampler:
 
     def bins_remaining(self, left_idx: int, right_idx: int) -> bool:
         """Check if there are empty bins in the given range."""
-        return self._bins_remaining_generic(left_idx, right_idx, self.bin_samples, exclusive=True)
+        return self._bins_remaining_generic(
+            left_idx, right_idx, self.bin_samples, exclusive=True
+        )
 
     def get_filled_samples(self) -> List[SamplePoint]:
         """Return only the non-None samples from bins."""
@@ -506,17 +530,17 @@ class BinarySearchSampler:
     ) -> List[Tuple[int, int]]:
         """
         Identify contiguous intervals of empty return bins.
-        
+
         Args:
             filled_return_bins: Set of bin indices that are already filled
             return_bin_edges: Array of bin edge values
-            
+
         Returns:
             List of (start_bin, end_bin) tuples representing gap intervals
         """
         gap_intervals = []
         current_gap_start = None
-        
+
         for i in range(self.return_bins):
             if i not in filled_return_bins:
                 # Start of a new gap
@@ -527,39 +551,47 @@ class BinarySearchSampler:
                 if current_gap_start is not None:
                     gap_intervals.append((current_gap_start, i - 1))
                     current_gap_start = None
-        
+
         # Handle gap that extends to the end
         if current_gap_start is not None:
             gap_intervals.append((current_gap_start, self.return_bins - 1))
-        
+
         return gap_intervals
 
-    def determine_return_bin(self, return_value: float, return_bin_edges: NDArray[np.float64]) -> int:
+    def determine_return_bin(
+        self, return_value: float, return_bin_edges: NDArray[np.float64]
+    ) -> int:
         """
         Determine which return bin a value falls into.
-        
+
         Args:
             return_value: The return value to bin
             return_bin_edges: Array of bin edge values
-            
+
         Returns:
             Bin index (0 to return_bins-1)
         """
-        return self._determine_bin_generic(return_value, return_bin_edges, self.return_bins)
+        return self._determine_bin_generic(
+            return_value, return_bin_edges, self.return_bins
+        )
 
-    def return_bins_remaining(self, left_bin_idx: int, right_bin_idx: int, filled_return_bins: set) -> bool:
+    def return_bins_remaining(
+        self, left_bin_idx: int, right_bin_idx: int, filled_return_bins: set
+    ) -> bool:
         """
         Check if there are empty return bins in the given range.
-        
+
         Args:
             left_bin_idx: Left boundary bin index (inclusive)
             right_bin_idx: Right boundary bin index (inclusive)
             filled_return_bins: Set of already filled bin indices
-            
+
         Returns:
             True if there are empty bins in the range
         """
-        return self._bins_remaining_generic(left_bin_idx, right_bin_idx, filled_return_bins, exclusive=False)
+        return self._bins_remaining_generic(
+            left_bin_idx, right_bin_idx, filled_return_bins, exclusive=False
+        )
 
     def binary_search_return_gaps(
         self,
@@ -574,7 +606,7 @@ class BinarySearchSampler:
     ) -> int:
         """
         Recursively fill return bins using binary search.
-        
+
         Args:
             left_sample: Sample with lower return value
             right_sample: Sample with higher return value
@@ -584,49 +616,63 @@ class BinarySearchSampler:
             return_bin_edges: Array of return bin edges
             additional_samples: List to append new samples to
             iteration_count: Current iteration count for safety checks
-            
+
         Returns:
             Number of evaluations performed
         """
         # Check convergence criteria using the generic method
-        if self._check_convergence(left_sample.input_value, right_sample.input_value, iteration_count):
+        if self._check_convergence(
+            left_sample.input_value, right_sample.input_value, iteration_count
+        ):
             return 0
-        
+
         # Calculate middle input value
         middle_input = (left_sample.input_value + right_sample.input_value) / 2
-        
+
         # Evaluate at middle point
         middle_sample = self.evaluate_at_input(middle_input)
         evals = 1
-        
+
         try:
             middle_return = self.extract_return_value(middle_sample)
         except ValueError:
             # Can't extract return value, skip this sample
             return evals
-            
+
         # Determine which bin this return falls into
         middle_bin = self.determine_return_bin(middle_return, return_bin_edges)
-        
+
         # Add sample to the filled bins set
         if middle_bin not in filled_return_bins:
             filled_return_bins.add(middle_bin)
             additional_samples.append(middle_sample)
             self.return_refinement_samples.append(middle_sample)
-        
+
         # Recursively search left and right if bins remain
         if self.return_bins_remaining(left_return_bin, middle_bin, filled_return_bins):
             evals += self.binary_search_return_gaps(
-                left_sample, middle_sample, left_return_bin, middle_bin,
-                filled_return_bins, return_bin_edges, additional_samples, iteration_count + evals
+                left_sample,
+                middle_sample,
+                left_return_bin,
+                middle_bin,
+                filled_return_bins,
+                return_bin_edges,
+                additional_samples,
+                iteration_count + evals,
             )
-            
+
         if self.return_bins_remaining(middle_bin, right_return_bin, filled_return_bins):
             evals += self.binary_search_return_gaps(
-                middle_sample, right_sample, middle_bin, right_return_bin,
-                filled_return_bins, return_bin_edges, additional_samples, iteration_count + evals
+                middle_sample,
+                right_sample,
+                middle_bin,
+                right_return_bin,
+                filled_return_bins,
+                return_bin_edges,
+                additional_samples,
+                iteration_count + evals,
             )
-            
+
         return evals
 
     def search_for_return_range(
@@ -656,7 +702,9 @@ class BinarySearchSampler:
         # Set max_iterations based on mode
         if max_iterations is None:
             if self.unbounded_mode:
-                max_iterations = float('inf')  # Truly unbounded - only safety checks limit
+                max_iterations = float(
+                    "inf"
+                )  # Truly unbounded - only safety checks limit
             else:
                 max_iterations = 10  # Default for bounded mode
 
@@ -728,7 +776,7 @@ class BinarySearchSampler:
                 left_input = middle_input
             else:
                 right_input = middle_input
-                
+
             iteration_count += 1
 
         return None
