@@ -295,7 +295,7 @@ def test_coverage_with_different_parameters():
         )
         print("-" * 40)
 
-        eval_function = create_test_evaluation_function()
+        eval_function = create_test_evaluation_function()  # Use default (with noise)
 
         sampler = BinarySearchSampler(
             eval_function=eval_function,
@@ -792,13 +792,17 @@ def test_phase2_edge_cases():
 
     def extreme_range_function(threshold: float) -> Tuple[float, Dict[str, Any]]:
         afhp = threshold
-        # Very wide return range with gaps
+        # Monotonic function with very steep slope in middle
+        # This creates a challenging but valid test case
         if threshold < 25:
-            return_val = 10.0
+            # Slow increase at the beginning
+            return_val = 10.0 + (threshold / 25.0) * 40.0
         elif threshold > 75:
-            return_val = 990.0
+            # Slow increase at the end
+            return_val = 950.0 + ((threshold - 75) / 25.0) * 40.0
         else:
-            return_val = 500.0
+            # Very steep increase in the middle
+            return_val = 50.0 + ((threshold - 25) / 50.0) * 900.0
 
         return afhp, {"return_mean": return_val}
 

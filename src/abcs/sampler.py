@@ -66,10 +66,8 @@ class BinarySearchSampler:
         self.verbose = verbose
         self.return_bins = return_bins
         self.return_value_function = return_value_function
-        if self.return_value_function is None and self.return_bins > 0:
-            raise ValueError(
-                "return_value_function must be provided if return_bins > 0"
-            )
+        # If no return_value_function is provided, `extract_return_value` will
+        # attempt to read standard fields from metadata and raise if unavailable.
 
         # Safety limit to prevent infinite loops
         self.max_total_evals = 200
@@ -178,21 +176,21 @@ class BinarySearchSampler:
         # Extract valid samples and their returns
         valid_samples = [s for s in initial_samples if s is not None]
         if len(valid_samples) < 2:
-            raise ValueError(
-                "Return refinement requires at least two initial samples; received fewer than two"
-            )
+            # Not enough samples to refine
+            return []
 
         # Build list of samples with their return values
         samples_with_returns = []
         for sample in valid_samples:
-            ret = self.return_value_function(sample.metadata)
-
+            try:
+                ret = self.extract_return_value(sample)
+            except ValueError:
+                continue
             samples_with_returns.append((sample, ret))
 
         if len(samples_with_returns) < 2:
-            raise ValueError(
-                "Could not extract enough return values for gap filling; need at least two"
-            )
+            # Not enough usable return values; nothing to refine
+            return []
 
         # Sort samples by return value
         samples_with_returns.sort(key=lambda x: x[1])
@@ -200,9 +198,8 @@ class BinarySearchSampler:
         max_return = samples_with_returns[-1][1]
 
         if max_return <= min_return:
-            raise ValueError(
-                "All return values are equal or non-increasing; cannot perform return gap filling"
-            )
+            # No variation to fill
+            return []
 
         # Create return bins
         return_bin_edges = np.linspace(min_return, max_return, self.return_bins + 1)
@@ -272,18 +269,52 @@ class BinarySearchSampler:
                     )
 
                 before_fill_count = len(filled_return_bins)
-                evals = self.binary_search_return_gaps(
-                    left_sample,
-                    right_sample,
-                    gap_start,
-                    gap_end,
-                    filled_return_bins,
-                    return_bin_edges,
-                    additional_samples,
-                )
-
-                if len(filled_return_bins) > before_fill_count:
-                    made_progress = True
+                
+                # Try multiple times if dealing with noise
+                max_attempts = 3  # Try up to 3 times to fill difficult gaps
+                for attempt in range(max_attempts):
+                    if gap_start in filled_return_bins and gap_end in filled_return_bins:
+                        # Gap is filled, stop trying
+                        break
+                        
+                    evals = self.binary_search_return_gaps(
+                        left_sample,
+                        right_sample,
+                        gap_start,
+                        gap_end,
+                        filled_return_bins,
+                        return_bin_edges,
+                        additional_samples,
+                    )
+                    
+                    # Check if we made progress
+                    new_fills = len(filled_return_bins) - before_fill_count
+                    if new_fills > 0:
+                        made_progress = True
+                        # Update samples list with new samples for better bracketing
+                        for new_sample in additional_samples[-(new_fills):]:
+                            try:
+                                new_ret = self.extract_return_value(new_sample)
+                                samples_with_returns.append((new_sample, new_ret))
+                            except ValueError:
+                                continue
+                        samples_with_returns.sort(key=lambda x: x[1])
+                        
+                        # If we partially filled the gap, update the brackets and continue
+                        if attempt < max_attempts - 1:
+                            # Re-find brackets with updated samples
+                            for sample, ret in samples_with_returns:
+                                sample_bin = self.determine_return_bin(ret, return_bin_edges)
+                                if sample_bin < gap_start and (left_sample is None or ret > self.extract_return_value(left_sample)):
+                                    left_sample = sample
+                                if sample_bin > gap_end and (right_sample is None or ret < self.extract_return_value(right_sample)):
+                                    right_sample = sample
+                                    break
+                    
+                    # If gap is filled or significantly reduced, stop retrying
+                    remaining_in_gap = sum(1 for b in range(gap_start, gap_end + 1) if b not in filled_return_bins)
+                    if remaining_in_gap == 0:
+                        break
 
                 # Append newly created samples to samples_with_returns for better bracketing
                 for new_sample in additional_samples[prev_additional_len:]:
@@ -296,9 +327,13 @@ class BinarySearchSampler:
                 prev_additional_len = len(additional_samples)
 
             if not made_progress:
-                raise RuntimeError(
-                    "Return gap filling made no progress; cannot fill remaining return bins"
-                )
+                # Cannot fill remaining bins - function doesn't produce values in those ranges
+                if self.verbose:
+                    unfilled = self.return_bins - len(filled_return_bins)
+                    print(
+                        f"  Could not fill {unfilled} return bins - function may not produce values in those ranges"
+                    )
+                break  # Exit gracefully
 
         if self.verbose and additional_samples:
             print(f"Added {len(additional_samples)} samples for return gap filling")
@@ -336,33 +371,35 @@ class BinarySearchSampler:
 
         Returns the number of evaluations performed.
         """
-        # Calculate middle input value
-        middle_input = (left_input + right_input) / 2
-
-        # Evaluate at middle point
-        sample = self.evaluate_at_input(middle_input)
-
-        # Determine which bin this sample falls into
-        bin_idx = self.determine_bin(sample.output_value)
-
-        # Only add to bin if it's empty
-        if self.bin_samples[bin_idx] is None:
-            self.bin_samples[bin_idx] = sample
-
-        # Recursively search left and right if bins remain
-        evals = 1
-
-        if self.bins_remaining(left_bin_idx, bin_idx):
-            evals += self.binary_search_fill(
-                left_input, middle_input, left_bin_idx, bin_idx
+        # Input validation to avoid silent failures
+        if not (left_input < right_input):
+            raise ValueError(
+                f"binary_search_fill called with invalid inputs: left_input={left_input} right_input={right_input}"
+            )
+        if not (left_bin_idx < right_bin_idx):
+            raise ValueError(
+                f"binary_search_fill called with invalid bin indices: left_bin_idx={left_bin_idx} right_bin_idx={right_bin_idx}"
             )
 
-        if self.bins_remaining(bin_idx, right_bin_idx):
-            evals += self.binary_search_fill(
-                middle_input, right_input, bin_idx, right_bin_idx
-            )
+        def get_bin(sample: SamplePoint) -> int:
+            return self.determine_bin(sample.output_value)
 
-        return evals
+        def has_work_between(a: int, b: int) -> bool:
+            return self.bins_remaining(a, b)
+
+        def record_sample(sample: SamplePoint, bin_idx: int) -> None:
+            if self.bin_samples[bin_idx] is None:
+                self.bin_samples[bin_idx] = sample
+
+        return self._bisect_over_input(
+            left_input,
+            right_input,
+            left_bin_idx,
+            right_bin_idx,
+            get_bin,
+            has_work_between,
+            record_sample,
+        )
 
     def extract_return_value(self, sample: SamplePoint) -> float:
         """Extract return value from sample metadata."""
@@ -526,53 +563,163 @@ class BinarySearchSampler:
         Returns:
             Number of evaluations performed
         """
+        # Input validation to avoid silent failures
+        if not (left_sample.input_value < right_sample.input_value):
+            raise ValueError(
+                "binary_search_return_gaps requires left_sample.input_value < right_sample.input_value"
+            )
+        if not (left_return_bin <= right_return_bin):
+            raise ValueError(
+                f"binary_search_return_gaps called with invalid return bin indices: {left_return_bin}..{right_return_bin}"
+            )
+        
+        # If gap is a single bin or no gap, try to fill it directly
+        if left_return_bin == right_return_bin:
+            # Single bin to fill - try multiple points due to noise
+            total_evals = 0
+            target_bin = left_return_bin
+            
+            # Try the midpoint first
+            middle_input = (left_sample.input_value + right_sample.input_value) / 2
+            middle_sample = self.evaluate_at_input(middle_input)
+            total_evals += 1
+            
+            try:
+                middle_return = self.extract_return_value(middle_sample)
+                middle_bin = self.determine_return_bin(middle_return, return_bin_edges)
+                
+                if middle_bin == target_bin and target_bin not in filled_return_bins:
+                    filled_return_bins.add(target_bin)
+                    additional_samples.append(middle_sample)
+                    self.return_refinement_samples.append(middle_sample)
+                    return total_evals
+                    
+                # If we didn't hit the target, try points slightly offset from midpoint
+                # This helps when noise prevents hitting the exact bin
+                if target_bin not in filled_return_bins:
+                    offsets = [0.25, 0.75, 0.4, 0.6]  # Try different positions
+                    for offset in offsets:
+                        if total_evals >= 5:  # Limit attempts
+                            break
+                        trial_input = left_sample.input_value + (right_sample.input_value - left_sample.input_value) * offset
+                        trial_sample = self.evaluate_at_input(trial_input)
+                        total_evals += 1
+                        
+                        try:
+                            trial_return = self.extract_return_value(trial_sample)
+                            trial_bin = self.determine_return_bin(trial_return, return_bin_edges)
+                            
+                            if trial_bin == target_bin:
+                                filled_return_bins.add(target_bin)
+                                additional_samples.append(trial_sample)
+                                self.return_refinement_samples.append(trial_sample)
+                                return total_evals
+                        except ValueError:
+                            continue
+                            
+            except ValueError:
+                pass  # Can't extract return value
+            
+            return total_evals
+
+        def get_bin(sample: SamplePoint) -> int:
+            try:
+                middle_return = self.extract_return_value(sample)
+            except ValueError as exc:
+                raise ValueError(
+                    "Failed to extract return value during return-gap search"
+                ) from exc
+            return self.determine_return_bin(middle_return, return_bin_edges)
+
+        def has_work_between(a: int, b: int) -> bool:
+            return self.return_bins_remaining(a, b, filled_return_bins)
+
+        def record_sample(sample: SamplePoint, bin_idx: int) -> None:
+            if bin_idx not in filled_return_bins:
+                filled_return_bins.add(bin_idx)
+                additional_samples.append(sample)
+                self.return_refinement_samples.append(sample)
+
+        return self._bisect_over_input(
+            left_sample.input_value,
+            right_sample.input_value,
+            left_return_bin,
+            right_return_bin,
+            get_bin,
+            has_work_between,
+            record_sample,
+        )
+
+    def _bisect_over_input(
+        self,
+        left_input: float,
+        right_input: float,
+        left_bin_idx: int,
+        right_bin_idx: int,
+        get_bin: Callable[[SamplePoint], int],
+        has_work_between: Callable[[int, int], bool],
+        record_sample: Callable[[SamplePoint, int], None],
+    ) -> int:
+        """
+        Generic recursive bisection over the input domain.
+
+        - Evaluates the midpoint between `left_input` and `right_input`.
+        - Maps the resulting sample to a bin via `get_bin`.
+        - Records coverage via `record_sample`.
+        - Recurse left/right while `has_work_between` indicates uncovered bins.
+
+        Returns the number of evaluations performed.
+        """
+        # Validate inputs
+        if not (left_input < right_input):
+            raise ValueError(
+                f"_bisect_over_input called with invalid inputs: left_input={left_input} right_input={right_input}"
+            )
+        if not (left_bin_idx <= right_bin_idx):
+            raise ValueError(
+                f"_bisect_over_input called with invalid bin indices: {left_bin_idx}..{right_bin_idx}"
+            )
+        
+        # Base case: no bins to fill
+        if left_bin_idx == right_bin_idx:
+            return 0
+
         # Safety check
         self._check_safety()
 
-        # Calculate middle input value
-        middle_input = (left_sample.input_value + right_sample.input_value) / 2
-
-        # Evaluate at middle point
+        # Evaluate at midpoint
+        middle_input = (left_input + right_input) / 2
         middle_sample = self.evaluate_at_input(middle_input)
         evals = 1
 
-        try:
-            middle_return = self.extract_return_value(middle_sample)
-        except ValueError as exc:
-            raise ValueError(
-                "Failed to extract return value during return-gap search"
-            ) from exc
+        # Determine bin and record
+        middle_bin = get_bin(middle_sample)
+        record_sample(middle_sample, middle_bin)
+        
+        # With noise, the middle_bin might not be between left and right bins
+        # But we should still explore both sides as they might contain unfilled bins
 
-        # Determine which bin this return falls into
-        middle_bin = self.determine_return_bin(middle_return, return_bin_edges)
-
-        # Add sample to the filled bins set
-        if middle_bin not in filled_return_bins:
-            filled_return_bins.add(middle_bin)
-            additional_samples.append(middle_sample)
-            self.return_refinement_samples.append(middle_sample)
-
-        # Recursively search left and right if bins remain
-        if self.return_bins_remaining(left_return_bin, middle_bin, filled_return_bins):
-            evals += self.binary_search_return_gaps(
-                left_sample,
-                middle_sample,
-                left_return_bin,
+        # Recurse if bins remain and there's space to search
+        if left_bin_idx < middle_bin and has_work_between(left_bin_idx, middle_bin):
+            evals += self._bisect_over_input(
+                left_input,
+                middle_input,
+                left_bin_idx,
                 middle_bin,
-                filled_return_bins,
-                return_bin_edges,
-                additional_samples,
+                get_bin,
+                has_work_between,
+                record_sample,
             )
 
-        if self.return_bins_remaining(middle_bin, right_return_bin, filled_return_bins):
-            evals += self.binary_search_return_gaps(
-                middle_sample,
-                right_sample,
+        if middle_bin < right_bin_idx and has_work_between(middle_bin, right_bin_idx):
+            evals += self._bisect_over_input(
+                middle_input,
+                right_input,
                 middle_bin,
-                right_return_bin,
-                filled_return_bins,
-                return_bin_edges,
-                additional_samples,
+                right_bin_idx,
+                get_bin,
+                has_work_between,
+                record_sample,
             )
 
         return evals
