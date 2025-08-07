@@ -37,11 +37,13 @@ class BinarySearchSampler:
         verbose: bool = True,
         return_bins: int = 0,
         return_value_function: Optional[Callable[[Dict[str, Any]], float]] = None,
-        max_additional_evals: int = 20,
-        unbounded_mode: bool = False,
     ):
         """
         Initialize the ABCS sampler.
+
+        The sampler always operates in unbounded mode with theoretical convergence 
+        guarantees. It continues sampling until all bins are filled or no progress 
+        can be made, with safety mechanisms to prevent infinite loops.
 
         Args:
             eval_function: Function that takes an input value and returns
@@ -55,11 +57,6 @@ class BinarySearchSampler:
             return_bins: Number of return bins for curve smoothing (0 = disabled)
             return_value_function: Function to extract return value from sample
                 metadata. Only used if return_bins > 0.
-            max_additional_evals: Maximum additional evaluations for return refinement
-                                 (ignored when unbounded_mode=True)
-            unbounded_mode: If True, removes evaluation limits and continues until
-                           all bins are filled or no progress can be made. Provides
-                           theoretical convergence guarantees for monotonic functions.
         """
         self.eval_function = eval_function
         self.num_bins = num_bins
@@ -68,13 +65,11 @@ class BinarySearchSampler:
         self.input_to_threshold = input_to_threshold or (lambda x: x)
         self.verbose = verbose
         self.return_bins = return_bins
-        self.max_additional_evals = max_additional_evals
-        self.unbounded_mode = unbounded_mode
         self.return_value_function = return_value_function
         # Note: return_value_function is optional - extract_return_value has fallback logic
 
-        # Safety limit for unbounded mode (prevent infinite loops)
-        self.max_total_evals_unbounded = 10000
+        # Safety limit to prevent infinite loops
+        self.max_total_evals = 10000
 
         # Initialize bins
         self.bin_edges: NDArray[np.float64] = np.linspace(
@@ -151,31 +146,26 @@ class BinarySearchSampler:
     ) -> bool:
         """
         Check if binary search should terminate based on convergence criteria.
+        
+        Uses unbounded convergence logic with safety mechanisms to prevent
+        infinite loops while providing theoretical convergence guarantees.
 
         Args:
             left_value: Left boundary value
             right_value: Right boundary value
-            iteration_count: Current iteration count
+            iteration_count: Current iteration count (unused in unbounded mode)
 
         Returns:
             True if search should terminate
         """
-        # Check iteration limits
-        if self.unbounded_mode:
-            # In unbounded mode, check safety limit
-            if self.total_evals >= self.max_total_evals_unbounded:
-                if self.verbose:
-                    print(
-                        f"Reached safety limit of {self.max_total_evals_unbounded} total evaluations"
-                    )
-                return True
-        else:
-            # In bounded mode, check iteration limit
-            if iteration_count >= self.max_additional_evals:
-                return True
+        # Check safety limit to prevent infinite loops
+        if self.total_evals >= self.max_total_evals:
+            if self.verbose:
+                print(f"Reached safety limit of {self.max_total_evals} total evaluations")
+            return True
 
         # Check precision threshold
-        precision_threshold = 1e-8 if self.unbounded_mode else 1e-6
+        precision_threshold = 1e-8
         if abs(right_value - left_value) < precision_threshold:
             return True
 
@@ -317,11 +307,7 @@ class BinarySearchSampler:
         )
 
         if self.verbose and gap_intervals:
-            mode_text = (
-                "unbounded mode"
-                if self.unbounded_mode
-                else f"max {self.max_additional_evals} evals"
-            )
+            mode_text = f"safety limit {self.max_total_evals} evals"
             print(
                 f"Found {len(gap_intervals)} return gap intervals to fill ({mode_text})"
             )
@@ -699,14 +685,9 @@ class BinarySearchSampler:
         Returns:
             SamplePoint if found, None if not found within max_iterations
         """
-        # Set max_iterations based on mode
+        # Set max_iterations - using unbounded approach with safety limit
         if max_iterations is None:
-            if self.unbounded_mode:
-                max_iterations = float(
-                    "inf"
-                )  # Truly unbounded - only safety checks limit
-            else:
-                max_iterations = 10  # Default for bounded mode
+            max_iterations = float("inf")  # Only limited by safety checks
 
         # Sort existing samples by return value to use for interpolation
         samples_with_returns = []

@@ -93,7 +93,6 @@ def example_two_phase_coverage():
         eval_function=eval_func,
         num_bins=12,
         return_bins=8,  # Enable secondary axis coverage
-        max_additional_evals=20,
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         verbose=True,

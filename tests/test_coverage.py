@@ -176,7 +176,6 @@ def test_full_coverage():
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         return_bins=return_bins,
-        unbounded_mode=True,  # Use unbounded mode for guaranteed convergence
         verbose=True,
     )
 
@@ -304,7 +303,6 @@ def test_coverage_with_different_parameters():
             input_range=(0.0, 100.0),
             output_range=(0.0, 100.0),
             return_bins=config["return_bins"],
-            unbounded_mode=True,  # Use unbounded mode
             verbose=False,
         )
 
@@ -392,7 +390,6 @@ def test_afhp_coverage_guarantee():
             input_range=(0.0, 100.0),
             output_range=(0.0, 100.0),
             return_bins=0,  # Disable return refinement to test AFHP only
-            unbounded_mode=True,  # Use unbounded mode
             verbose=False,
         )
 
@@ -453,7 +450,6 @@ def test_guaranteed_full_coverage():
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         return_bins=return_bins,
-        unbounded_mode=True,  # Use unbounded mode for guaranteed convergence
         verbose=True,
     )
 
@@ -525,7 +521,6 @@ def test_convergence_with_pathological_function():
         return_bins=10,
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
-        unbounded_mode=True,
         verbose=True,
     )
 
@@ -537,12 +532,12 @@ def test_convergence_with_pathological_function():
     print(f"  - AFHP coverage: {summary['coverage_percentage']:.1f}%")
     print(f"  - Total evaluations: {summary['total_evaluations']}")
     print(
-        f"  - Algorithm terminated: {'PASS' if summary['total_evaluations'] < sampler.max_total_evals_unbounded else 'FAIL'}"
+        f"  - Algorithm terminated: {'PASS' if summary['total_evaluations'] < sampler.max_total_evals else 'FAIL'}"
     )
 
     # Test that it terminated before the safety limit
     terminated_properly = (
-        summary["total_evaluations"] < sampler.max_total_evals_unbounded
+        summary["total_evaluations"] < sampler.max_total_evals
     )
 
     return terminated_properly
@@ -602,7 +597,6 @@ def test_phase2_binary_bisection():
         eval_function=complex_return_function,
         num_bins=20,  # Decent AFHP coverage
         return_bins=20,  # Many return bins to test gap filling
-        unbounded_mode=True,  # Use unbounded mode for thorough testing
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
         verbose=True,
@@ -755,7 +749,6 @@ def test_phase2_edge_cases():
         eval_function=constant_return_function,
         num_bins=5,
         return_bins=5,
-        unbounded_mode=True,
         verbose=False,
     )
 
@@ -783,7 +776,6 @@ def test_phase2_edge_cases():
         eval_function=minimal_samples_function,
         num_bins=10,
         return_bins=5,
-        unbounded_mode=True,
         verbose=False,
     )
 
@@ -816,7 +808,6 @@ def test_phase2_edge_cases():
         eval_function=extreme_range_function,
         num_bins=8,
         return_bins=6,
-        unbounded_mode=True,
         verbose=False,
     )
 
@@ -860,7 +851,6 @@ def test_phase1_only_sanity_check():
         return_bins=0,  # Phase 1 only - no Phase 2
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
-        unbounded_mode=True,
         verbose=False,
     )
 
@@ -891,7 +881,6 @@ def test_phase1_only_sanity_check():
         return_bins=0,  # Phase 1 only - no Phase 2
         input_range=(0.0, 100.0),
         output_range=(0.0, 100.0),
-        unbounded_mode=True,
         verbose=False,
     )
 
