@@ -9,7 +9,7 @@ from typing import List, Tuple, Callable, Optional, Any, Dict
 import numpy as np
 from numpy.typing import NDArray
 
-from .types import SamplePoint
+from abcs.types import SamplePoint
 
 
 class BinarySearchSampler:
@@ -66,7 +66,10 @@ class BinarySearchSampler:
         self.verbose = verbose
         self.return_bins = return_bins
         self.return_value_function = return_value_function
-        # Note: return_value_function is optional - extract_return_value has fallback logic
+        if self.return_value_function is None and self.return_bins > 0:
+            raise ValueError(
+                "return_value_function must be provided if return_bins > 0"
+            )
 
         # Safety limit to prevent infinite loops
         self.max_total_evals = 10000
@@ -79,99 +82,6 @@ class BinarySearchSampler:
         self.all_samples: List[SamplePoint] = []
         self.return_refinement_samples: List[SamplePoint] = []
         self.total_evals: int = 0
-
-    # Helper methods for deduplication - placed after __init__ for logical grouping
-    def _determine_bin_generic(
-        self, value: float, bin_edges: NDArray[np.float64], num_bins: int
-    ) -> int:
-        """
-        Generic method to determine which bin a value falls into.
-
-        Args:
-            value: The value to bin
-            bin_edges: Array of bin edge values
-            num_bins: Total number of bins
-
-        Returns:
-            Bin index (0 to num_bins-1)
-        """
-        min_val = bin_edges[0]
-        max_val = bin_edges[-1]
-
-        # Handle edge cases
-        if value <= min_val:
-            return 0
-        if value >= max_val:
-            return num_bins - 1
-
-        # Find the appropriate bin
-        for i in range(len(bin_edges) - 1):
-            if bin_edges[i] <= value < bin_edges[i + 1]:
-                return i
-
-        # This should not happen, but default to last bin
-        return num_bins - 1
-
-    def _bins_remaining_generic(
-        self, left_idx: int, right_idx: int, filled_bins, exclusive: bool = True
-    ) -> bool:
-        """
-        Generic method to check if there are empty bins in the given range.
-
-        Args:
-            left_idx: Left boundary index
-            right_idx: Right boundary index
-            filled_bins: Set of filled bin indices (or None-check for Phase 1)
-            exclusive: If True, exclude boundaries (Phase 1 style); if False, include (Phase 2 style)
-
-        Returns:
-            True if there are empty bins in the range
-        """
-        start = left_idx + 1 if exclusive else left_idx
-        end = right_idx if exclusive else right_idx + 1
-
-        for i in range(start, end):
-            if isinstance(filled_bins, set):
-                # Phase 2 style: check set membership
-                if i not in filled_bins:
-                    return True
-            else:
-                # Phase 1 style: check for None in list
-                if i < len(filled_bins) and filled_bins[i] is None:
-                    return True
-        return False
-
-    def _check_convergence(
-        self, left_value: float, right_value: float, iteration_count: int
-    ) -> bool:
-        """
-        Check if binary search should terminate based on convergence criteria.
-
-        Uses unbounded convergence logic with safety mechanisms to prevent
-        infinite loops while providing theoretical convergence guarantees.
-
-        Args:
-            left_value: Left boundary value
-            right_value: Right boundary value
-            iteration_count: Current iteration count (unused in unbounded mode)
-
-        Returns:
-            True if search should terminate
-        """
-        # Check safety limit to prevent infinite loops
-        if self.total_evals >= self.max_total_evals:
-            if self.verbose:
-                print(
-                    f"Reached safety limit of {self.max_total_evals} total evaluations"
-                )
-            return True
-
-        # Check precision threshold
-        precision_threshold = 1e-8
-        if abs(right_value - left_value) < precision_threshold:
-            return True
-
-        return False
 
     def run_with_return_refinement(self) -> List[Optional[SamplePoint]]:
         """
@@ -224,6 +134,10 @@ class BinarySearchSampler:
         self.bin_samples[right_bin] = right_sample
 
         # Fill remaining bins using binary search
+        if left_bin > right_bin:
+            raise ValueError(
+                "Monotonicity assumption violated: left endpoint maps to a higher bin than right endpoint"
+            )
         if left_bin < right_bin:
             self.binary_search_fill(
                 self.input_range[0], self.input_range[1], left_bin, right_bin
@@ -265,24 +179,21 @@ class BinarySearchSampler:
         # Extract valid samples and their returns
         valid_samples = [s for s in initial_samples if s is not None]
         if len(valid_samples) < 2:
-            return []
+            raise ValueError(
+                "Return refinement requires at least two initial samples; received fewer than two"
+            )
 
         # Build list of samples with their return values
         samples_with_returns = []
         for sample in valid_samples:
-            if self.return_value_function:
-                ret = self.return_value_function(sample.metadata)
-            else:
-                try:
-                    ret = self.extract_return_value(sample)
-                except ValueError:
-                    continue
+            ret = self.return_value_function(sample.metadata)
+            
             samples_with_returns.append((sample, ret))
 
         if len(samples_with_returns) < 2:
-            if self.verbose:
-                print("Warning: Could not extract enough return values for gap filling")
-            return []
+            raise ValueError(
+                "Could not extract enough return values for gap filling; need at least two"
+            )
 
         # Sort samples by return value
         samples_with_returns.sort(key=lambda x: x[1])
@@ -290,9 +201,9 @@ class BinarySearchSampler:
         max_return = samples_with_returns[-1][1]
 
         if max_return <= min_return:
-            if self.verbose:
-                print("Warning: All return values are equal, cannot fill gaps")
-            return []
+            raise ValueError(
+                "All return values are equal or non-increasing; cannot perform return gap filling"
+            )
 
         # Create return bins
         return_bin_edges = np.linspace(min_return, max_return, self.return_bins + 1)
@@ -623,9 +534,10 @@ class BinarySearchSampler:
 
         try:
             middle_return = self.extract_return_value(middle_sample)
-        except ValueError:
-            # Can't extract return value, skip this sample
-            return evals
+        except ValueError as exc:
+            raise ValueError(
+                "Failed to extract return value during return-gap search"
+            ) from exc
 
         # Determine which bin this return falls into
         middle_bin = self.determine_return_bin(middle_return, return_bin_edges)
@@ -763,6 +675,99 @@ class BinarySearchSampler:
             iteration_count += 1
 
         return None
+    
+    def _determine_bin_generic(
+        self, value: float, bin_edges: NDArray[np.float64], num_bins: int
+    ) -> int:
+        """
+        Generic method to determine which bin a value falls into.
+
+        Args:
+            value: The value to bin
+            bin_edges: Array of bin edge values
+            num_bins: Total number of bins
+
+        Returns:
+            Bin index (0 to num_bins-1)
+        """
+        min_val = bin_edges[0]
+        max_val = bin_edges[-1]
+
+        # Handle edge cases
+        if value <= min_val:
+            return 0
+        if value >= max_val:
+            return num_bins - 1
+
+        # Find the appropriate bin
+        for i in range(len(bin_edges) - 1):
+            if bin_edges[i] <= value < bin_edges[i + 1]:
+                return i
+
+        # If we reached here, the value did not fit any bin interval
+        raise ValueError(
+            "Value did not fall within any provided bin interval; check bin edges"
+        )
+
+    def _bins_remaining_generic(
+        self, left_idx: int, right_idx: int, filled_bins, exclusive: bool = True
+    ) -> bool:
+        """
+        Generic method to check if there are empty bins in the given range.
+
+        Args:
+            left_idx: Left boundary index
+            right_idx: Right boundary index
+            filled_bins: Set of filled bin indices (or None-check for Phase 1)
+            exclusive: If True, exclude boundaries (Phase 1 style); if False, include (Phase 2 style)
+
+        Returns:
+            True if there are empty bins in the range
+        """
+        start = left_idx + 1 if exclusive else left_idx
+        end = right_idx if exclusive else right_idx + 1
+
+        for i in range(start, end):
+            if isinstance(filled_bins, set):
+                # Phase 2 style: check set membership
+                if i not in filled_bins:
+                    return True
+            else:
+                # Phase 1 style: check for None in list
+                if i < len(filled_bins) and filled_bins[i] is None:
+                    return True
+        return False
+
+    def _check_convergence(
+        self, left_value: float, right_value: float, iteration_count: int
+    ) -> bool:
+        """
+        Check if binary search should terminate based on convergence criteria.
+
+        Uses unbounded convergence logic with safety mechanisms to prevent
+        infinite loops while providing theoretical convergence guarantees.
+
+        Args:
+            left_value: Left boundary value
+            right_value: Right boundary value
+            iteration_count: Current iteration count (unused in unbounded mode)
+
+        Returns:
+            True if search should terminate
+        """
+        # Check safety limit to prevent infinite loops
+        if self.total_evals >= self.max_total_evals:
+            raise RuntimeError(
+                f"Reached safety limit of {self.max_total_evals} total evaluations"
+            )
+
+        # Check precision threshold
+        precision_threshold = 1e-8
+        if abs(right_value - left_value) < precision_threshold:
+            return True
+
+        return False
+
 
     def get_all_samples_including_refinement(self) -> List[SamplePoint]:
         """Return all samples including those from return refinement."""
