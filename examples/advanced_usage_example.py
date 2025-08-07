@@ -92,7 +92,9 @@ def demonstrate_improved_coverage():
 
     # Calculate secondary coverage
     def calculate_return_coverage(sampler, return_bins):
-        all_samples = sampler.get_all_samples_including_refinement()
+        primary_samples = sampler.get_filled_samples()
+        refinement_samples = sampler.get_return_refinement_samples()
+        all_samples = primary_samples + refinement_samples
         returns = []
         for sample in all_samples:
             try:

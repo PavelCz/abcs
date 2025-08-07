@@ -177,7 +177,7 @@ sampler = BinarySearchSampler(
     max_additional_evals=25
 )
 samples = sampler.run_with_return_refinement()
-all_samples = sampler.get_all_samples_including_refinement()
+all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
 ```
 
 ### Custom Input Transformation
@@ -236,7 +236,7 @@ samples = sampler.run_with_return_refinement()
 ### Debugging Tools
 - Set `verbose=True` for algorithm progress output
 - Use `get_coverage_summary()` to inspect coverage statistics
-- Check `get_all_samples()` to examine evaluation history
+- Use `get_filled_samples()` and `get_return_refinement_samples()` to examine samples
 - Plot results to visualize coverage patterns
 
 ## Dependencies

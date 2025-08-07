@@ -77,7 +77,9 @@ Run the complete two-phase ABCS algorithm.
 **Example**:
 ```python
 samples = sampler.run_with_return_refinement()
-all_samples = sampler.get_all_samples_including_refinement()
+primary_samples = sampler.get_filled_samples()
+refinement_samples = sampler.get_return_refinement_samples()
+all_samples = primary_samples + refinement_samples
 ```
 
 ##### `get_filled_samples() -> List[SamplePoint]`
@@ -86,17 +88,7 @@ Get only the non-None samples from primary bins.
 
 **Returns**: List of valid samples from primary bins
 
-##### `get_all_samples() -> List[SamplePoint]`
-
-Get all samples from Phase 1 in evaluation order.
-
-**Returns**: List of all Phase 1 samples
-
-##### `get_all_samples_including_refinement() -> List[SamplePoint]`
-
-Get all samples including those from Phase 2 secondary refinement.
-
-**Returns**: Combined list of all samples from both phases
+<!-- Removed: get_all_samples and get_all_samples_including_refinement -->
 
 ##### `get_return_refinement_samples() -> List[SamplePoint]`
 
@@ -202,7 +194,7 @@ sampler = BinarySearchSampler(
 samples = sampler.run_with_return_refinement()
 
 # Get all samples
-all_samples = sampler.get_all_samples_including_refinement()
+all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
 refinement_samples = sampler.get_return_refinement_samples()
 
 print(f"Phase 1 samples: {len(samples)}")

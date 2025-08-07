@@ -177,7 +177,7 @@ print(f"Primary coverage: {summary['coverage_percentage']}%")
 print(f"Total evaluations: {summary['total_evaluations']}")
 
 # Access all samples including secondary refinement
-all_samples = sampler.get_all_samples_including_refinement()
+all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
 ```
 
 ## Summary

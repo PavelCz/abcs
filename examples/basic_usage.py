@@ -102,7 +102,7 @@ def example_two_phase_coverage():
     samples = sampler.run_with_return_refinement()
 
     # Get all samples including refinement
-    all_samples = sampler.get_all_samples_including_refinement()
+    all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
     refinement_samples = sampler.get_return_refinement_samples()
 
     # Print results

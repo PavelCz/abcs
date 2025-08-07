@@ -191,7 +191,7 @@ def test_full_coverage():
     print(f"\nX-axis (AFHP) coverage: {x_axis_coverage:.1f}%")
 
     # Calculate y-axis (return) coverage
-    all_samples = sampler.get_all_samples_including_refinement()
+    all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
 
     if return_bins > 0 and len(all_samples) > 0:
         # Extract return values
@@ -313,7 +313,7 @@ def test_coverage_with_different_parameters():
         x_coverage = summary["coverage_percentage"]
 
         # Calculate y-axis coverage
-        all_samples = sampler.get_all_samples_including_refinement()
+        all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
         returns = []
         for sample in all_samples:
             try:
@@ -461,7 +461,7 @@ def test_guaranteed_full_coverage():
     x_coverage = summary["coverage_percentage"]
 
     # Check return coverage
-    all_samples = sampler.get_all_samples_including_refinement()
+    all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
     returns = []
     for sample in all_samples:
         try:
@@ -608,7 +608,7 @@ def test_phase2_binary_bisection():
 
     # Analyze results
     summary = sampler.get_coverage_summary()
-    all_samples = sampler.get_all_samples_including_refinement()
+    all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
     return_samples = sampler.get_return_refinement_samples()
 
     print("\nPhase 2 Binary Bisection Results:")
