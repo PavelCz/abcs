@@ -536,9 +536,7 @@ def test_convergence_with_pathological_function():
     )
 
     # Test that it terminated before the safety limit
-    terminated_properly = (
-        summary["total_evaluations"] < sampler.max_total_evals
-    )
+    terminated_properly = summary["total_evaluations"] < sampler.max_total_evals
 
     return terminated_properly
 

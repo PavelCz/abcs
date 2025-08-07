@@ -41,8 +41,8 @@ class BinarySearchSampler:
         """
         Initialize the ABCS sampler.
 
-        The sampler always operates in unbounded mode with theoretical convergence 
-        guarantees. It continues sampling until all bins are filled or no progress 
+        The sampler always operates in unbounded mode with theoretical convergence
+        guarantees. It continues sampling until all bins are filled or no progress
         can be made, with safety mechanisms to prevent infinite loops.
 
         Args:
@@ -146,7 +146,7 @@ class BinarySearchSampler:
     ) -> bool:
         """
         Check if binary search should terminate based on convergence criteria.
-        
+
         Uses unbounded convergence logic with safety mechanisms to prevent
         infinite loops while providing theoretical convergence guarantees.
 
@@ -161,7 +161,9 @@ class BinarySearchSampler:
         # Check safety limit to prevent infinite loops
         if self.total_evals >= self.max_total_evals:
             if self.verbose:
-                print(f"Reached safety limit of {self.max_total_evals} total evaluations")
+                print(
+                    f"Reached safety limit of {self.max_total_evals} total evaluations"
+                )
             return True
 
         # Check precision threshold
