@@ -141,9 +141,8 @@ class JointCoverageSampler:
             # Choose which adjacent pair to split based on the worst normalized gap
             axis, left_index, right_index = self._select_worst_gap_pair()
 
-            # Determine the new percentile as the midpoint between the adjacent pair
-            # percentiles
-            p_left = self._points[left_index].percentileis
+            # Determine the new percentile as the midpoint between the adjacent pair percentiles
+            p_left = self._points[left_index].percentile
             p_right = self._points[right_index].percentile
             p_new = 0.5 * (p_left + p_right)
 
