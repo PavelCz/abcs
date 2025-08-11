@@ -1,10 +1,10 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code when working with the ABCS (Adaptive Binary Coverage Search) library.
+This file provides guidance to Claude Code when working with the ACS (Adaptive Coverage Sampling) library.
 
 ## Project Overview
 
-ABCS is a Python library that implements the Adaptive Binary Coverage Search algorithm for efficient sampling of monotonic curves. The algorithm uses a two-phase approach to ensure comprehensive coverage across both primary and secondary output dimensions with minimal evaluations.
+ACS is a Python library for sampling monotonic curves with coverage guarantees. It includes a joint-coverage sampler that adaptively ensures coverage on both axes.
 
 **Python Version**: Requires Python 3.8 or higher.
 
@@ -37,7 +37,7 @@ ruff format src/ tests/ examples/
 ruff check src/ tests/ examples/
 
 # Type check (suppress verbose output like CI does)
-pytype src/abcs/*.py --verbosity=0 2>/dev/null
+pytype src/acs/*.py --verbosity=0 2>/dev/null
 
 # Run all quality checks at once
 ci/format_and_check.sh
@@ -46,7 +46,7 @@ ci/format_and_check.sh
 python -m pytest tests/
 
 # Run tests with coverage
-python -m pytest tests/ --cov=abcs --cov-report=html
+python -m pytest tests/ --cov=acs --cov-report=html
 ```
 
 ### Testing
@@ -77,16 +77,8 @@ twine upload dist/*
 
 ### Core Components
 
-1. **`src/abcs/types.py`**: Core data structures
-   - `SamplePoint`: Represents a single evaluation point with input, output, and metadata
-
-2. **`src/abcs/sampler.py`**: Main algorithm implementation
-   - `BinarySearchSampler`: The core ABCS algorithm class
-   - Handles both single-phase and two-phase coverage
-
-3. **`src/abcs/__init__.py`**: Public API
-   - Exports `BinarySearchSampler` and `SamplePoint`
-   - Defines version and public interface
+1. **`src/acs/joint_sampler.py`**: Joint coverage sampler
+2. **`src/acs/__init__.py`**: Public API for ACS
 
 ### Key Design Patterns
 
@@ -159,12 +151,18 @@ The test suite verifies:
 
 ### Basic Usage (Primary Coverage Only)
 ```python
-from abcs import BinarySearchSampler
+from acs import JointCoverageSampler
 
 def eval_func(x):
     return monotonic_function(x), {"metadata": "value"}
 
-sampler = BinarySearchSampler(eval_func, num_bins=10)
+sampler = JointCoverageSampler(
+    eval_at_percentile=lambda p: (p*100.0, 25.0 + 60.0*p),
+    eval_at_lower_extreme=lambda: (0.0, 25.0),
+    eval_at_upper_extreme=lambda: (100.0, 85.0),
+    coverage_fraction=0.1,
+    max_total_evals=200,
+)
 samples = sampler.run()
 ```
 

@@ -9,11 +9,11 @@ from typing import Callable, Tuple
 
 import numpy as np
 
-# Ensure local src/ is importable before any installed package named abcs
+# Ensure local src/ is importable before any installed package named acs
 sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 )
-from abcs import JointCoverageSampler
+from acs import JointCoverageSampler
 from tests.visualization_utils_v2 import (
     initialize_test_run,
     save_joint_artifacts,

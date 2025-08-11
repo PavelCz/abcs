@@ -1,15 +1,12 @@
 # API Reference: JointCoverageSampler
 
 ## Overview
-
 Adaptive single-phase sampler that ensures joint coverage on AFHP (x) and performance (y) by iteratively splitting the largest normalized neighbor gap on either axis. Handles noisy evaluations by re-running offending adjacent pairs to restore monotonicity in expectation.
 
 ## Data classes
 
 ### CurvePoint
-
 Represents an evaluated point with aggregated statistics.
-
 - percentile (float): Input percentile used for evaluation (0.0–1.0)
 - afhp (float): Mean AFHP across repeats for this percentile
 - performance (float): Mean performance across repeats for this percentile
@@ -17,9 +14,7 @@ Represents an evaluated point with aggregated statistics.
 - order (int): Sampling order index (1-based) useful for visualization
 
 ### SamplingResult
-
 Structured result of a sampling run.
-
 - points (List[CurvePoint]): Collected points (ordering unspecified)
 - coverage_x_max_gap (float): Max normalized neighbor gap on AFHP axis
 - coverage_y_max_gap (float): Max normalized neighbor gap on performance axis
@@ -30,8 +25,9 @@ Structured result of a sampling run.
 ## Class: JointCoverageSampler
 
 ### Constructor
-
 ```python
+from acs import JointCoverageSampler
+
 JointCoverageSampler(
     *,
     eval_at_percentile: Callable[[float], Tuple[float, float]],
@@ -41,9 +37,7 @@ JointCoverageSampler(
     max_total_evals: int,
 )
 ```
-
 Parameters:
-
 - eval_at_percentile: Evaluate at desired percentile p∈[0,1] and return (afhp, performance)
 - eval_at_lower_extreme: Evaluate lower extreme (e.g., threshold = +∞) and return (afhp, performance)
 - eval_at_upper_extreme: Evaluate upper extreme (e.g., threshold = −∞) and return (afhp, performance)
@@ -51,17 +45,14 @@ Parameters:
 - max_total_evals: Global evaluation budget (includes re-runs)
 
 ### Method
-
 ```python
 run() -> SamplingResult
 ```
-
 Executes the adaptive loop until both axes meet coverage_fraction or the budget is exhausted.
 
 Returns: SamplingResult
 
 ### Example
-
 ```python
 from acs import JointCoverageSampler
 

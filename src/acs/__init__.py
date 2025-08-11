@@ -1,8 +1,7 @@
 """
-ABCS - Adaptive Binary Coverage Search
+ACS - Adaptive Coverage Sampling
 
-A Python library for efficient sampling of monotonic curves using adaptive
-binary search with coverage guarantees.
+Python library for sampling monotonic curves with coverage guarantees (joint and legacy options).
 """
 
 from .joint_sampler import JointCoverageSampler, CurvePoint, SamplingResult

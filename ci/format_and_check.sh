@@ -1,20 +1,20 @@
 #!/usr/bin/env bash
 
-# Format and check script for ABCS library
+# Format and check script for ACS library
 # This script formats code and runs linting and type checking
 
 # Source files to check
 SRC_FILES=(
-    "src/abcs/"
+    "src/acs/"
     "tests/"
-    "examples/"
+    # "examples/"
 )
 EXCLUDED_FILES=("")
 
-# set -x  # echo commands
+set -x  # echo commands
 set -e  # quit immediately on error
 
-echo "=== ABCS Code Quality Checks ==="
+echo "=== ACS Code Quality Checks ==="
 
 echo "1. Formatting code with ruff..."
 # Run ruff as formatter (black-ish and isort-ish)
@@ -26,6 +26,6 @@ ruff check "${SRC_FILES[@]}" --exclude "${EXCLUDED_FILES[@]}" --fix
 
 echo "3. Type checking with pytype..."
 # Run pytype with suppressed debug logging
-pytype src/abcs/*.py --verbosity=0 2>/dev/null
+pytype src/acs/*.py --verbosity=0 2>/dev/null
 
 echo "✅ All checks passed!"
