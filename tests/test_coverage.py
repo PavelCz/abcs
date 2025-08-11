@@ -313,7 +313,9 @@ def test_coverage_with_different_parameters():
         x_coverage = summary["coverage_percentage"]
 
         # Calculate y-axis coverage
-        all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
+        all_samples = (
+            sampler.get_filled_samples() + sampler.get_return_refinement_samples()
+        )
         returns = []
         for sample in all_samples:
             try:

@@ -18,6 +18,7 @@ from typing import Callable, List, Optional, Tuple
 # Public result data structures
 # -----------------------------
 
+
 @dataclass
 class CurvePoint:
     """A single point on the trade-off curve.
@@ -47,6 +48,7 @@ class SamplingResult:
 # Internal data models
 # --------------------
 
+
 @dataclass
 class _PointState:
     """Internal state for a sampled input with aggregation buffers."""
@@ -75,6 +77,7 @@ class _PointState:
 # -------------
 # Sampler class
 # -------------
+
 
 class JointCoverageSampler:
     """Adaptive sampler achieving joint coverage on AFHP and performance.
@@ -138,7 +141,7 @@ class JointCoverageSampler:
             # Choose which adjacent pair to split based on the worst normalized gap
             axis, left_index, right_index = self._select_worst_gap_pair()
 
-            # Determine the new percentile as the midpoint between the adjacent pair 
+            # Determine the new percentile as the midpoint between the adjacent pair
             # percentiles
             p_left = self._points[left_index].percentileis
             p_right = self._points[right_index].percentile
@@ -186,10 +189,20 @@ class JointCoverageSampler:
             return
         # Assign synthetic percentiles 0.0 and 1.0 for extremes
         afhp_low, perf_low = self._safe_eval_lower()
-        self._points.append(_PointState(percentile=0.0, afhp_samples=[afhp_low], performance_samples=[perf_low]))
+        self._points.append(
+            _PointState(
+                percentile=0.0, afhp_samples=[afhp_low], performance_samples=[perf_low]
+            )
+        )
 
         afhp_high, perf_high = self._safe_eval_upper()
-        self._points.append(_PointState(percentile=1.0, afhp_samples=[afhp_high], performance_samples=[perf_high]))
+        self._points.append(
+            _PointState(
+                percentile=1.0,
+                afhp_samples=[afhp_high],
+                performance_samples=[perf_high],
+            )
+        )
 
         # Keep points ordered by percentile
         self._points.sort(key=lambda s: s.percentile)
@@ -234,7 +247,13 @@ class JointCoverageSampler:
             if abs(pt.percentile - percentile) < 1e-12:
                 pt.add_observation(afhp, performance)
                 return
-        self._points.append(_PointState(percentile=percentile, afhp_samples=[afhp], performance_samples=[performance]))
+        self._points.append(
+            _PointState(
+                percentile=percentile,
+                afhp_samples=[afhp],
+                performance_samples=[performance],
+            )
+        )
         self._points.sort(key=lambda s: s.percentile)
 
     # -----------------
@@ -264,14 +283,18 @@ class JointCoverageSampler:
         y_gap = 0.0
         if y_max > y_min:
             for i in range(len(by_y) - 1):
-                gap = (by_y[i + 1].performance_mean - by_y[i].performance_mean) / (y_max - y_min)
+                gap = (by_y[i + 1].performance_mean - by_y[i].performance_mean) / (
+                    y_max - y_min
+                )
                 if gap > y_gap:
                     y_gap = gap
         return x_gap, y_gap
 
     def _select_worst_gap_pair(self) -> Tuple[str, int, int]:
         # Compute x-axis gaps in AFHP order (on means)
-        x_order = sorted(range(len(self._points)), key=lambda idx: self._points[idx].afhp_mean)
+        x_order = sorted(
+            range(len(self._points)), key=lambda idx: self._points[idx].afhp_mean
+        )
         x_min = self._points[x_order[0]].afhp_mean
         x_max = self._points[x_order[-1]].afhp_mean
         worst_x_gap = -1.0
@@ -288,7 +311,9 @@ class JointCoverageSampler:
             worst_x_gap = 0.0
 
         # Compute y-axis gaps in performance order (on means)
-        y_order = sorted(range(len(self._points)), key=lambda idx: self._points[idx].performance_mean)
+        y_order = sorted(
+            range(len(self._points)), key=lambda idx: self._points[idx].performance_mean
+        )
         y_min = self._points[y_order[0]].performance_mean
         y_max = self._points[y_order[-1]].performance_mean
         worst_y_gap = -1.0
@@ -338,7 +363,10 @@ class JointCoverageSampler:
             for i in range(len(ordered_indices) - 1):
                 a_idx = ordered_indices[i]
                 b_idx = ordered_indices[i + 1]
-                if self._points[a_idx].performance_mean > self._points[b_idx].performance_mean:
+                if (
+                    self._points[a_idx].performance_mean
+                    > self._points[b_idx].performance_mean
+                ):
                     violation_pair = (a_idx, b_idx)
                     break
             if violation_pair is None:

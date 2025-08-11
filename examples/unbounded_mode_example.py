@@ -125,7 +125,9 @@ def compare_bounded_vs_unbounded():
 
     # Calculate secondary coverage for both modes
     def calculate_return_coverage(sampler, return_bins):
-        all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
+        all_samples = (
+            sampler.get_filled_samples() + sampler.get_return_refinement_samples()
+        )
         returns = []
         for sample in all_samples:
             try:

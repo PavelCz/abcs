@@ -1,9 +1,11 @@
-from typing import Tuple
 import abc
 import numpy as np
 
+
 class SamplePoint:
-    def __init__(self, desired_percentile: float, observed_percentile: float, performance: float):
+    def __init__(
+        self, desired_percentile: float, observed_percentile: float, performance: float
+    ):
         self.desired_percentile = desired_percentile
         self.observed_percentile = observed_percentile
         self.performance = performance
@@ -50,8 +52,6 @@ def perform_abcs(
 
     percentile_sample_bins = [None] * num_bins
     performance_sample_bins = [None] * num_bins
-
-
 
     # Fill the bins
     for percentile in percentile_bin_edges:
