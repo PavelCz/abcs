@@ -103,20 +103,17 @@ def plot_percentile_to_afhp(points: List[CurvePoint], test_name: str) -> Optiona
     if plt is None or not points:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
-    # Support both 'percentile' and 'desired_percentile' field names
-    x = [
-        getattr(p, "percentile", getattr(p, "desired_percentile", None)) for p in points
-    ]
+    
+    x = [p.desired_percentile for p in points]
     y = [p.afhp for p in points]
     plt.figure(figsize=(8, 5))
     plt.scatter(x, y, s=40, alpha=0.8)
     # Label with sampling order
     for p in points:
         try:
-            px = getattr(p, "percentile", getattr(p, "desired_percentile", None))
             plt.annotate(
                 str(p.order),
-                (px, p.afhp),
+                (p.desired_percentile, p.afhp),
                 textcoords="offset points",
                 xytext=(4, 4),
                 fontsize=8,
@@ -192,8 +189,7 @@ def save_joint_artifacts(
     with open(points_file, "w") as f:
         f.write("percentile\tafhp\tperformance\trepeats\n")
         for p in points:
-            px = getattr(p, "percentile", getattr(p, "desired_percentile", 0.0))
-            f.write(f"{px:.6f}\t{p.afhp:.6f}\t{p.performance:.6f}\t{p.repeats_used}\n")
+            f.write(f"{p.desired_percentile:.6f}\t{p.afhp:.6f}\t{p.performance:.6f}\t{p.repeats_used}\n")
     return {
         "percentile_to_afhp": p_plot,
         "afhp_to_performance": xy_plot,
