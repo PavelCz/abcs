@@ -1,243 +1,78 @@
-# ABCS API Reference
+# API Reference: JointCoverageSampler
 
-## Classes
+## Overview
+Adaptive single-phase sampler that ensures joint coverage on AFHP (x) and performance (y) by iteratively splitting the largest normalized neighbor gap on either axis. Handles noisy evaluations by re-running offending adjacent pairs to restore monotonicity in expectation.
 
-### `SamplePoint`
+## Data classes
 
-A dataclass representing a single evaluation point.
+### CurvePoint
+Represents an evaluated point with aggregated statistics.
+- percentile (float): Input percentile used for evaluation (0.0–1.0)
+- afhp (float): Mean AFHP across repeats for this percentile
+- performance (float): Mean performance across repeats for this percentile
+- repeats_used (int): Number of times this percentile was evaluated
+- order (int): Sampling order index (1-based) useful for visualization
 
-#### Attributes
+### SamplingResult
+Structured result of a sampling run.
+- points (List[CurvePoint]): Collected points (ordering unspecified)
+- coverage_x_max_gap (float): Max normalized neighbor gap on AFHP axis
+- coverage_y_max_gap (float): Max normalized neighbor gap on performance axis
+- total_evals (int): Total evaluation calls including re-runs
+- early_stop_reason (Optional[str]): None if coverage achieved; otherwise a short reason (e.g., "max_total_evals")
+- monotonicity_violations_remaining (bool): True if any violations remain at stop
 
-- `input_value` (float): The input parameter value (e.g., threshold percentile)
-- `output_value` (float): The measured primary output (e.g., AFHP)
-- `metadata` (Dict[str, Any]): Additional data including secondary outputs
+## Class: JointCoverageSampler
 
-#### Example
-
+### Constructor
 ```python
-from abcs import SamplePoint
-
-sample = SamplePoint(
-    input_value=50.0,
-    output_value=45.2,
-    metadata={"return_mean": 78.5, "threshold_used": 0.234}
+JointCoverageSampler(
+    *,
+    eval_at_percentile: Callable[[float], Tuple[float, float]],
+    eval_at_lower_extreme: Callable[[], Tuple[float, float]],
+    eval_at_upper_extreme: Callable[[], Tuple[float, float]],
+    coverage_fraction: float,
+    max_total_evals: int,
 )
 ```
+Parameters:
+- eval_at_percentile: Evaluate at desired percentile p∈[0,1] and return (afhp, performance)
+- eval_at_lower_extreme: Evaluate lower extreme (e.g., threshold = +∞) and return (afhp, performance)
+- eval_at_upper_extreme: Evaluate upper extreme (e.g., threshold = −∞) and return (afhp, performance)
+- coverage_fraction: Maximum allowed normalized neighbor gap on both axes (e.g., 0.10)
+- max_total_evals: Global evaluation budget (includes re-runs)
 
-### `BinarySearchSampler`
-
-The main ABCS algorithm implementation.
-
-#### Constructor
-
+### Method
 ```python
-BinarySearchSampler(
-    eval_function: Callable[[float], Tuple[float, Dict[str, Any]]],
-    num_bins: int,
-    input_range: Tuple[float, float] = (0.0, 100.0),
-    output_range: Tuple[float, float] = (0.0, 100.0),
-    input_to_threshold: Optional[Callable[[float], float]] = None,
-    verbose: bool = True,
-    return_bins: int = 0,
-    max_additional_evals: int = 20,
+run() -> SamplingResult
+```
+Executes the adaptive loop until both axes meet coverage_fraction or the budget is exhausted.
+
+Returns: SamplingResult
+
+### Example
+```python
+from abcs import JointCoverageSampler
+
+def eval_at_percentile(p: float):
+    threshold = p * 100.0
+    afhp = threshold  # example linear mapping
+    performance = 25.0 + 0.6 * (afhp / 100.0) * 100.0
+    return afhp, performance
+
+def eval_at_lower_extreme():
+    return 0.0, 25.0
+
+def eval_at_upper_extreme():
+    return 100.0, 85.0
+
+sampler = JointCoverageSampler(
+    eval_at_percentile=eval_at_percentile,
+    eval_at_lower_extreme=eval_at_lower_extreme,
+    eval_at_upper_extreme=eval_at_upper_extreme,
+    coverage_fraction=0.10,
+    max_total_evals=200,
 )
+result = sampler.run()
+print(result.coverage_x_max_gap, result.coverage_y_max_gap)
 ```
-
-##### Parameters
-
-- **eval_function**: Function that takes an input value and returns `(output_value, metadata_dict)`
-- **num_bins**: Number of bins to divide the primary output space into
-- **input_range**: Range of valid input values `(min, max)`
-- **output_range**: Range of expected primary output values `(min, max)`
-- **input_to_threshold**: Optional function to convert input values to actual thresholds for evaluation
-- **verbose**: Whether to print progress messages
-- **return_bins**: Number of secondary output bins for refinement (0 = disabled)
-- **max_additional_evals**: Maximum additional evaluations for secondary refinement
-
-#### Methods
-
-##### `run() -> List[Optional[SamplePoint]]`
-
-Run Phase 1 only (primary axis coverage via binary search).
-
-**Returns**: List of samples, one per bin (where possible)
-
-**Example**:
-```python
-samples = sampler.run()
-filled_samples = [s for s in samples if s is not None]
-```
-
-##### `run_with_return_refinement() -> List[Optional[SamplePoint]]`
-
-Run the complete two-phase ABCS algorithm.
-
-**Returns**: List of samples from Phase 1 (Phase 2 samples stored separately)
-
-**Example**:
-```python
-samples = sampler.run_with_return_refinement()
-primary_samples = sampler.get_filled_samples()
-refinement_samples = sampler.get_return_refinement_samples()
-all_samples = primary_samples + refinement_samples
-```
-
-##### `get_filled_samples() -> List[SamplePoint]`
-
-Get only the non-None samples from primary bins.
-
-**Returns**: List of valid samples from primary bins
-
-<!-- Removed: get_all_samples and get_all_samples_including_refinement -->
-
-##### `get_return_refinement_samples() -> List[SamplePoint]`
-
-Get only the samples added during Phase 2 secondary refinement.
-
-**Returns**: List of Phase 2 samples
-
-##### `get_coverage_summary() -> Dict[str, Any]`
-
-Get summary statistics about the primary axis sampling coverage.
-
-**Returns**: Dictionary with coverage information:
-- `bins_filled`: Number of primary bins filled
-- `coverage_percentage`: Percentage of primary bins filled
-- `output_range_covered`: Tuple of (min, max) primary output values covered
-- `gaps`: List of uncovered primary output ranges
-- `total_evaluations`: Total number of evaluations performed
-
-**Example**:
-```python
-summary = sampler.get_coverage_summary()
-print(f"Coverage: {summary['coverage_percentage']}%")
-print(f"Evaluations: {summary['total_evaluations']}")
-```
-
-##### `determine_bin(output_value: float) -> int`
-
-Determine which primary bin an output value falls into.
-
-**Parameters**:
-- **output_value**: Primary output value to categorize
-
-**Returns**: Bin index (0-based)
-
-**Raises**: `ValueError` if output_value is outside the expected range
-
-##### `extract_return_value(sample: SamplePoint) -> float`
-
-Extract secondary output value from sample metadata.
-
-**Parameters**:
-- **sample**: Sample point to extract from
-
-**Returns**: Secondary output value
-
-**Raises**: `ValueError` if secondary output cannot be found in metadata
-
-The method tries multiple keys in this order:
-1. `summary[split]["return_mean"]` for splits in ["test", "val", "eval"]
-2. `"return_mean"` directly in metadata
-3. `"return"` directly in metadata
-
-#### Properties
-
-- `num_bins`: Number of primary output bins
-- `return_bins`: Number of secondary output bins
-- `input_range`: Input value range
-- `output_range`: Primary output value range
-- `total_evals`: Total number of evaluations performed
-- `bin_edges`: Primary bin edge values
-- `verbose`: Whether progress messages are printed
-
-## Usage Patterns
-
-### Basic Usage (Primary Coverage Only)
-
-```python
-from abcs import BinarySearchSampler
-
-def my_eval_function(x):
-    y = some_computation(x)
-    return y, {"metadata": "value"}
-
-sampler = BinarySearchSampler(
-    eval_function=my_eval_function,
-    num_bins=10,
-    verbose=True
-)
-
-samples = sampler.run()
-coverage = sampler.get_coverage_summary()
-```
-
-### Two-Phase Usage (Primary + Secondary Coverage)
-
-```python
-from abcs import BinarySearchSampler
-
-def my_eval_function(x):
-    primary_output = compute_primary(x)
-    secondary_output = compute_secondary(x)
-    return primary_output, {"return_mean": secondary_output}
-
-sampler = BinarySearchSampler(
-    eval_function=my_eval_function,
-    num_bins=15,
-    return_bins=10,
-    max_additional_evals=25,
-    verbose=True
-)
-
-# Run both phases
-samples = sampler.run_with_return_refinement()
-
-# Get all samples
-all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
-refinement_samples = sampler.get_return_refinement_samples()
-
-print(f"Phase 1 samples: {len(samples)}")
-print(f"Phase 2 samples: {len(refinement_samples)}")
-```
-
-### Custom Input Transformation
-
-```python
-def percentile_to_threshold(percentile):
-    if percentile == 0:
-        return float("inf")
-    elif percentile == 100:
-        return float("-inf")
-    else:
-        return policy.train_percentile(100 - percentile)
-
-sampler = BinarySearchSampler(
-    eval_function=my_eval_function,
-    num_bins=20,
-    input_range=(0.0, 100.0),
-    input_to_threshold=percentile_to_threshold,
-    verbose=True
-)
-```
-
-## Error Handling
-
-### Common Exceptions
-
-- **ValueError**: Raised when output values are outside expected ranges or required metadata is missing
-- **RuntimeError**: May be raised during evaluation if the provided function fails
-
-### Best Practices
-
-1. **Evaluation Function**: Ensure your evaluation function handles edge cases gracefully
-2. **Metadata Format**: Use consistent keys for secondary outputs in metadata
-3. **Range Specification**: Set `input_range` and `output_range` to match your problem domain
-4. **Budget Planning**: Set `max_additional_evals` based on available computational budget
-
-## Performance Considerations
-
-- **Primary Coverage**: Requires O(n log n) evaluations for n bins
-- **Secondary Coverage**: Requires up to `max_additional_evals` additional evaluations
-- **Memory Usage**: Stores all samples in memory; consider this for large-scale applications
-- **Evaluation Cost**: The algorithm's efficiency depends on your evaluation function's computational cost

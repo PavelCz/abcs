@@ -1,10 +1,10 @@
-# ABCS - Adaptive Binary Coverage Search
+# ACS - Adaptive Coverage Sampling for Noisy Monotonic Functions
 
-A Python library for efficient sampling of monotonic curves using adaptive binary search with coverage guarantees.
+A Python library for efficient sampling of monotonic curves with coverage guarantees. Includes a new joint-coverage sampler that adaptively achieves uniform coverage on both AFHP (x) and performance (y).
 
 ## Overview
 
-ABCS (Adaptive Binary Coverage Search) is a two-stage algorithm designed to efficiently sample points along monotonic curves while ensuring comprehensive coverage across both input and output dimensions. It's particularly useful for:
+ACS provides samplers to efficiently sample points along monotonic curves while ensuring comprehensive coverage across both input and output dimensions. It's particularly useful for:
 
 - Threshold evaluation in machine learning
 - Performance curve characterization
@@ -13,12 +13,9 @@ ABCS (Adaptive Binary Coverage Search) is a two-stage algorithm designed to effi
 
 ## Features
 
-- **Efficient**: Uses binary search to minimize evaluations
-- **Adaptive**: Automatically identifies and fills coverage gaps
-- **Two-stage approach**: 
-  - Stage 1: Ensures complete coverage along the primary axis
-  - Stage 2: Refines coverage along the secondary axis (optional)
-- **Guaranteed coverage**: Achieves 100% bin coverage when function spans full range
+- **Joint coverage**: JointCoverageSampler enforces max normalized neighbor gaps on both axes
+- **Adaptive**: Gap-driven refinement focuses evaluations where needed most
+- **Noise-tolerant**: Resolves local non-monotonicity via targeted re-runs
 - **Minimal dependencies**: Only requires NumPy
 
 ## Installation
@@ -35,47 +32,39 @@ cd abcs
 pip install -e .
 ```
 
-## Quick Start
+## Quick Start (Joint Coverage)
 
 ```python
-from abcs import BinarySearchSampler
+from abcs import JointCoverageSampler
 
-# Define your evaluation function
-def evaluate(x):
-    # Your evaluation logic here
-    output = some_computation(x)
-    metadata = {"additional_info": value}
-    return output, metadata
+def eval_at_percentile(p: float):
+  threshold = p * 100.0
+  afhp = threshold
+  performance = 25.0 + 0.6 * (afhp / 100.0) * 100.0
+  return afhp, performance
 
-# Create sampler
-sampler = BinarySearchSampler(
-    eval_function=evaluate,
-    num_bins=10,  # Number of bins for primary axis
-    return_bins=8,  # Number of bins for secondary axis (0 to disable)
-    input_range=(0.0, 100.0),
-    output_range=(0.0, 100.0),
-    verbose=True
+def eval_at_lower_extreme():
+  return 0.0, 25.0
+
+def eval_at_upper_extreme():
+  return 100.0, 85.0
+
+sampler = JointCoverageSampler(
+  eval_at_percentile=eval_at_percentile,
+  eval_at_lower_extreme=eval_at_lower_extreme,
+  eval_at_upper_extreme=eval_at_upper_extreme,
+  coverage_fraction=0.10,
+  max_total_evals=200,
 )
-
-# Run the algorithm
-samples = sampler.run_with_return_refinement()
-
-# Check coverage
-summary = sampler.get_coverage_summary()
-print(f"Coverage: {summary['coverage_percentage']}%")
+result = sampler.run()
+print(result.coverage_x_max_gap, result.coverage_y_max_gap)
 ```
 
 ## Documentation
 
 For detailed documentation, see the [docs](docs/) directory:
-- [Algorithm Explanation](docs/algorithm_explanation.md)
-- [API Reference](docs/api_reference.md)
 
-## Examples
-
-See the [examples](examples/) directory for complete examples:
-- [Basic Usage](examples/basic_usage.py)
-- [Visualization](examples/visualization.py)
+- [Joint Sampler API](docs/api_reference.md)
 
 ## Testing
 
@@ -88,16 +77,3 @@ python -m pytest tests/
 ## License
 
 MIT License - see LICENSE file for details.
-
-## Citation
-
-If you use ABCS in your research, please cite:
-
-```bibtex
-@software{abcs,
-  title = {ABCS: Adaptive Binary Coverage Search},
-  author = {Your Name},
-  year = {2024},
-  url = {https://github.com/yourusername/abcs}
-}
-```
