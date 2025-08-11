@@ -10,7 +10,9 @@ from typing import Callable, Tuple
 import numpy as np
 
 # Ensure local src/ is importable before any installed package named abcs
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src")))
+sys.path.insert(
+    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
+)
 from abcs import JointCoverageSampler
 from tests.visualization_utils_v2 import (
     initialize_test_run,
@@ -19,7 +21,9 @@ from tests.visualization_utils_v2 import (
 )
 
 
-def make_eval_callables(add_noise: bool = True, full_range: bool = False) -> Tuple[
+def make_eval_callables(
+    add_noise: bool = True, full_range: bool = False
+) -> Tuple[
     Callable[[float], Tuple[float, float]],
     Callable[[], Tuple[float, float]],
     Callable[[], Tuple[float, float]],
@@ -55,7 +59,7 @@ def make_eval_callables(add_noise: bool = True, full_range: bool = False) -> Tup
             scaled = afhp / 100.0
             k = 100.0
             log_factor = np.log(1.0 + k * scaled) / np.log(1.0 + k)
-            transformed = log_factor ** 0.3
+            transformed = log_factor**0.3
             value = base_return + (max_return - base_return) * transformed
         if add_noise:
             value = float(value + rng.randn() * 0.5)
@@ -93,7 +97,9 @@ def test_joint_coverage_meets_fraction_noise():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="noise_fraction_0_10")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="noise_fraction_0_10"
+    )
     print_artifact_summary(artifacts)
     assert result.coverage_x_max_gap <= 0.10 + 1e-9
     assert result.coverage_y_max_gap <= 0.10 + 1e-9
@@ -110,7 +116,9 @@ def test_joint_coverage_linear_full_range_tight_fraction():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="linear_fraction_0_05")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="linear_fraction_0_05"
+    )
     print_artifact_summary(artifacts)
     assert result.coverage_x_max_gap <= 0.05 + 1e-9
     assert result.coverage_y_max_gap <= 0.05 + 1e-9
@@ -153,7 +161,9 @@ def test_joint_coverage_pathological_converges():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="pathological_fraction_0_10")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="pathological_fraction_0_10"
+    )
     print_artifact_summary(artifacts)
     assert result.early_stop_reason is None
     assert result.coverage_x_max_gap <= 0.10 + 1e-9
@@ -165,7 +175,9 @@ def test_parameter_variations_coverage():
     initialize_test_run()
     for frac, budget in [(0.20, 120), (0.10, 200), (0.05, 400)]:
         # Use a strictly monotonic and continuous setup (no noise)
-        eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=False, full_range=False)
+        eval_p, eval_lo, eval_hi = make_eval_callables(
+            add_noise=False, full_range=False
+        )
         sampler = JointCoverageSampler(
             eval_at_percentile=eval_p,
             eval_at_lower_extreme=eval_lo,
@@ -176,7 +188,9 @@ def test_parameter_variations_coverage():
         result = sampler.run()
         frac_tag = str(frac).replace(".", "_")
         artifacts = save_joint_artifacts(
-            result.points, result, test_name=f"param_variations_frac_{frac_tag}_budget_{budget}"
+            result.points,
+            result,
+            test_name=f"param_variations_frac_{frac_tag}_budget_{budget}",
         )
         print_artifact_summary(artifacts)
         assert result.coverage_x_max_gap <= frac + 1e-9
@@ -195,7 +209,9 @@ def test_afhp_axis_coverage_full_range():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="afhp_full_range_fraction_0_05")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="afhp_full_range_fraction_0_05"
+    )
     print_artifact_summary(artifacts)
     assert result.coverage_x_max_gap <= 0.05 + 1e-9
     assert result.coverage_y_max_gap <= 0.05 + 1e-9
@@ -222,7 +238,9 @@ def test_edge_case_constant_performance():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="edge_constant_performance")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="edge_constant_performance"
+    )
     print_artifact_summary(artifacts)
     assert result.coverage_x_max_gap <= 0.1 + 1e-9
     # y gap should be 0 because y_max == y_min
@@ -255,7 +273,9 @@ def test_edge_case_minimal_samples_region():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="edge_minimal_samples_region")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="edge_minimal_samples_region"
+    )
     print_artifact_summary(artifacts)
     # Should terminate and provide finite gaps
     assert 0.0 <= result.coverage_x_max_gap <= 1.0
@@ -290,7 +310,9 @@ def test_edge_case_extreme_return_ranges():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="edge_extreme_return_ranges")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="edge_extreme_return_ranges"
+    )
     print_artifact_summary(artifacts)
     # This scenario can be budget-heavy due to large y-gaps; ensure no crash and
     # either coverage is met or we report early stop.
@@ -309,7 +331,9 @@ def test_budget_cap_triggers_early_stop():
     )
     initialize_test_run()
     result = sampler.run()
-    artifacts = save_joint_artifacts(result.points, result, test_name="budget_cap_early_stop")
+    artifacts = save_joint_artifacts(
+        result.points, result, test_name="budget_cap_early_stop"
+    )
     print_artifact_summary(artifacts)
     assert result.early_stop_reason == "max_total_evals"
     # Gaps likely above requirement

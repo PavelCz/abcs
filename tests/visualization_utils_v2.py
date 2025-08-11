@@ -8,6 +8,7 @@ and stores a small textual summary per test.
 
 Works with `CurvePoint` and `SamplingResult` from the new joint sampler.
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -76,7 +77,9 @@ def initialize_test_run() -> str:
     summary_file = test_run_dir / "test_run_info.txt"
     with open(summary_file, "w") as f:
         f.write(f"Test Run Started: {_CURRENT_TEST_RUN_TIMESTAMP}\n")
-        f.write(f"Start Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(
+            f"Start Time: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n"
+        )
         f.write(f"Test Run Directory: {test_run_dir}\n\n")
         f.write("Individual Test Results:\n")
         f.write("-" * 50 + "\n")
@@ -105,7 +108,13 @@ def plot_percentile_to_afhp(points: List[CurvePoint], test_name: str) -> Optiona
     # Label with sampling order
     for p in points:
         try:
-            plt.annotate(str(p.order), (p.percentile, p.afhp), textcoords="offset points", xytext=(4,4), fontsize=8)
+            plt.annotate(
+                str(p.order),
+                (p.percentile, p.afhp),
+                textcoords="offset points",
+                xytext=(4, 4),
+                fontsize=8,
+            )
         except Exception:
             pass
     plt.xlabel("Percentile (input)")
@@ -113,11 +122,15 @@ def plot_percentile_to_afhp(points: List[CurvePoint], test_name: str) -> Optiona
     plt.title(f"Percentile to AFHP - {test_name}")
     plt.grid(True, alpha=0.3)
     path = artifacts_dir / "percentile_to_afhp.png"
-    plt.tight_layout(); plt.savefig(path, dpi=150, bbox_inches="tight"); plt.close()
+    plt.tight_layout()
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
     return path
 
 
-def plot_afhp_to_performance(points: List[CurvePoint], test_name: str) -> Optional[Path]:
+def plot_afhp_to_performance(
+    points: List[CurvePoint], test_name: str
+) -> Optional[Path]:
     if plt is None or not points:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
@@ -128,7 +141,13 @@ def plot_afhp_to_performance(points: List[CurvePoint], test_name: str) -> Option
     # Label with sampling order
     for p in points:
         try:
-            plt.annotate(str(p.order), (p.afhp, p.performance), textcoords="offset points", xytext=(4,4), fontsize=8)
+            plt.annotate(
+                str(p.order),
+                (p.afhp, p.performance),
+                textcoords="offset points",
+                xytext=(4, 4),
+                fontsize=8,
+            )
         except Exception:
             pass
     plt.xlabel("AFHP (x)")
@@ -136,7 +155,9 @@ def plot_afhp_to_performance(points: List[CurvePoint], test_name: str) -> Option
     plt.title(f"AFHP to Performance - {test_name}")
     plt.grid(True, alpha=0.3)
     path = artifacts_dir / "afhp_to_performance.png"
-    plt.tight_layout(); plt.savefig(path, dpi=150, bbox_inches="tight"); plt.close()
+    plt.tight_layout()
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close()
     return path
 
 
@@ -157,13 +178,17 @@ def save_joint_artifacts(
         f.write(f"coverage_x_max_gap: {result.coverage_x_max_gap:.4f}\n")
         f.write(f"coverage_y_max_gap: {result.coverage_y_max_gap:.4f}\n")
         f.write(f"early_stop_reason: {result.early_stop_reason}\n")
-        f.write(f"monotonicity_violations_remaining: {result.monotonicity_violations_remaining}\n")
+        f.write(
+            f"monotonicity_violations_remaining: {result.monotonicity_violations_remaining}\n"
+        )
     # Dump points
     points_file = artifacts_dir / "points.tsv"
     with open(points_file, "w") as f:
         f.write("percentile\tafhp\tperformance\trepeats\n")
         for p in points:
-            f.write(f"{p.percentile:.6f}\t{p.afhp:.6f}\t{p.performance:.6f}\t{p.repeats_used}\n")
+            f.write(
+                f"{p.percentile:.6f}\t{p.afhp:.6f}\t{p.performance:.6f}\t{p.repeats_used}\n"
+            )
     return {
         "percentile_to_afhp": p_plot,
         "afhp_to_performance": xy_plot,
