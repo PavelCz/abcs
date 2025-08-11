@@ -26,7 +26,7 @@ class CurvePoint:
     Fields represent aggregated (mean) values across repeats for the same input.
     """
 
-    percentile: float
+    desired_percentile: float
     afhp: float
     performance: float
     repeats_used: int
@@ -166,7 +166,7 @@ class JointCoverageSampler:
         result = SamplingResult(
             points=[
                 CurvePoint(
-                    percentile=pt.percentile,
+                    desired_percentile=pt.percentile,
                     afhp=pt.afhp_mean,
                     performance=pt.performance_mean,
                     repeats_used=pt.repeats_used,
