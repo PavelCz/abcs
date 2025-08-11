@@ -158,3 +158,137 @@ def test_joint_coverage_pathological_converges():
     assert result.early_stop_reason is None
     assert result.coverage_x_max_gap <= 0.10 + 1e-9
     assert result.coverage_y_max_gap <= 0.10 + 1e-9
+
+
+def test_parameter_variations_coverage():
+    # Vary coverage fractions and ensure the sampler meets them with enough budget
+    for frac, budget in [(0.20, 120), (0.10, 200), (0.05, 400)]:
+        eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=True, full_range=False)
+        sampler = JointCoverageSampler(
+            eval_at_percentile=eval_p,
+            eval_at_lower_extreme=eval_lo,
+            eval_at_upper_extreme=eval_hi,
+            coverage_fraction=frac,
+            max_total_evals=budget,
+        )
+        result = sampler.run()
+        assert result.coverage_x_max_gap <= frac + 1e-9
+        assert result.coverage_y_max_gap <= frac + 1e-9
+
+
+def test_afhp_axis_coverage_full_range():
+    # When AFHP spans the full range linearly, coverage should be easy to satisfy
+    eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=False, full_range=True)
+    sampler = JointCoverageSampler(
+        eval_at_percentile=eval_p,
+        eval_at_lower_extreme=eval_lo,
+        eval_at_upper_extreme=eval_hi,
+        coverage_fraction=0.05,
+        max_total_evals=200,
+    )
+    result = sampler.run()
+    assert result.coverage_x_max_gap <= 0.05 + 1e-9
+    assert result.coverage_y_max_gap <= 0.05 + 1e-9
+
+
+def test_edge_case_constant_performance():
+    # Performance is constant; y-range is degenerate and treated as covered
+    def eval_p(p: float):
+        afhp = float(p * 100.0)
+        return afhp, 50.0
+
+    def eval_lo():
+        return 0.0, 50.0
+
+    def eval_hi():
+        return 100.0, 50.0
+
+    sampler = JointCoverageSampler(
+        eval_at_percentile=eval_p,
+        eval_at_lower_extreme=eval_lo,
+        eval_at_upper_extreme=eval_hi,
+        coverage_fraction=0.1,
+        max_total_evals=120,
+    )
+    result = sampler.run()
+    assert result.coverage_x_max_gap <= 0.1 + 1e-9
+    # y gap should be 0 because y_max == y_min
+    assert result.coverage_y_max_gap == 0.0
+
+
+def test_edge_case_minimal_samples_region():
+    # AFHP only varies in a narrow percentile band; elsewhere almost constant
+    def eval_p(p: float):
+        thr = p * 100.0
+        if 45.0 <= thr <= 55.0:
+            afhp = thr
+        else:
+            afhp = 50.0
+        perf = 60.0 if afhp >= 50.0 else 50.0
+        return float(afhp), float(perf)
+
+    def eval_lo():
+        return 50.0, 50.0
+
+    def eval_hi():
+        return 55.0, 60.0
+
+    sampler = JointCoverageSampler(
+        eval_at_percentile=eval_p,
+        eval_at_lower_extreme=eval_lo,
+        eval_at_upper_extreme=eval_hi,
+        coverage_fraction=0.2,
+        max_total_evals=200,
+    )
+    result = sampler.run()
+    # Should terminate and provide finite gaps
+    assert 0.0 <= result.coverage_x_max_gap <= 1.0
+    assert 0.0 <= result.coverage_y_max_gap <= 1.0
+
+
+def test_edge_case_extreme_return_ranges():
+    # Very wide performance range with steps
+    def eval_p(p: float):
+        thr = p * 100.0
+        afhp = thr
+        if thr < 25.0:
+            perf = 10.0
+        elif thr > 75.0:
+            perf = 990.0
+        else:
+            perf = 500.0
+        return float(afhp), float(perf)
+
+    def eval_lo():
+        return 0.0, 10.0
+
+    def eval_hi():
+        return 100.0, 990.0
+
+    sampler = JointCoverageSampler(
+        eval_at_percentile=eval_p,
+        eval_at_lower_extreme=eval_lo,
+        eval_at_upper_extreme=eval_hi,
+        coverage_fraction=0.10,
+        max_total_evals=300,
+    )
+    result = sampler.run()
+    # This scenario can be budget-heavy due to large y-gaps; ensure no crash and
+    # either coverage is met or we report early stop.
+    assert result.early_stop_reason in (None, "max_total_evals")
+
+
+def test_budget_cap_triggers_early_stop():
+    # Very tight coverage with tiny budget should early-stop
+    eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=True, full_range=False)
+    sampler = JointCoverageSampler(
+        eval_at_percentile=eval_p,
+        eval_at_lower_extreme=eval_lo,
+        eval_at_upper_extreme=eval_hi,
+        coverage_fraction=0.01,
+        max_total_evals=10,
+    )
+    result = sampler.run()
+    assert result.early_stop_reason == "max_total_evals"
+    # Gaps likely above requirement
+    assert result.coverage_x_max_gap >= 0.01 or result.coverage_y_max_gap >= 0.01

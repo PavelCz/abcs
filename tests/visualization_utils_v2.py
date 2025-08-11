@@ -10,10 +10,10 @@ Works with `CurvePoint` and `SamplingResult` from the new joint sampler.
 """
 from __future__ import annotations
 
-from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, List, Optional
 import datetime
+import os
 
 try:
     import matplotlib
@@ -60,8 +60,17 @@ def _cleanup_old_artifact_folders(max_folders: int = 5) -> None:
 
 def initialize_test_run() -> str:
     global _CURRENT_TEST_RUN_TIMESTAMP
-    _cleanup_old_artifact_folders(max_folders=5)
-    _CURRENT_TEST_RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    # If already initialized in this process, reuse the same timestamp
+    if _CURRENT_TEST_RUN_TIMESTAMP is not None:
+        return _CURRENT_TEST_RUN_TIMESTAMP
+
+    # Allow forcing a shared timestamp across processes via env var
+    forced_ts = os.environ.get("ABCS_TEST_RUN_TIMESTAMP")
+    if forced_ts:
+        _CURRENT_TEST_RUN_TIMESTAMP = forced_ts
+    else:
+        _cleanup_old_artifact_folders(max_folders=5)
+        _CURRENT_TEST_RUN_TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     test_run_dir = Path("test_artifacts") / _CURRENT_TEST_RUN_TIMESTAMP
     test_run_dir.mkdir(parents=True, exist_ok=True)
     summary_file = test_run_dir / "test_run_info.txt"
