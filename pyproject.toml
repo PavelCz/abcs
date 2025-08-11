@@ -3,16 +3,16 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "abcs"
+name = "acs"
 version = "0.1.0"
-description = "Adaptive Binary Coverage Search for efficient monotonic curve sampling"
+description = "Adaptive Coverage Search for efficient monotonic curve sampling"
 readme = "README.md"
 requires-python = ">=3.8"
 license = {text = "MIT"}
 authors = [
     {name = "Your Name", email = "your.email@example.com"},
 ]
-keywords = ["sampling", "optimization", "binary-search", "coverage", "monotonic"]
+keywords = ["sampling", "optimization", "coverage", "monotonic"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
@@ -44,9 +44,9 @@ examples = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/yourusername/abcs"
-"Bug Tracker" = "https://github.com/yourusername/abcs/issues"
-"Documentation" = "https://github.com/yourusername/abcs/tree/main/docs"
+"Homepage" = "https://github.com/yourusername/acs"
+"Bug Tracker" = "https://github.com/yourusername/acs/issues"
+"Documentation" = "https://github.com/yourusername/acs/tree/main/docs"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -57,5 +57,5 @@ target-version = "py38"
 
 [tool.pytype]
 python_version = "3.8"
-inputs = ["src/abcs"]
-exclude = ["src/abcs/__pycache__"]
+inputs = ["src/acs"]
+exclude = ["src/acs/__pycache__"]
