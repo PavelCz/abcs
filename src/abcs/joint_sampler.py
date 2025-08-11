@@ -30,6 +30,7 @@ class CurvePoint:
     afhp: float
     performance: float
     repeats_used: int
+    order: int
 
 
 @dataclass
@@ -56,6 +57,7 @@ class _PointState:
     percentile: float
     afhp_samples: List[float]
     performance_samples: List[float]
+    order_index: int
 
     def add_observation(self, afhp: float, performance: float) -> None:
         self.afhp_samples.append(afhp)
@@ -168,6 +170,7 @@ class JointCoverageSampler:
                     afhp=pt.afhp_mean,
                     performance=pt.performance_mean,
                     repeats_used=pt.repeats_used,
+                    order=getattr(pt, "order_index", -1),
                 )
                 for pt in self._points
             ],
@@ -190,7 +193,10 @@ class JointCoverageSampler:
         afhp_low, perf_low = self._safe_eval_lower()
         self._points.append(
             _PointState(
-                percentile=0.0, afhp_samples=[afhp_low], performance_samples=[perf_low]
+                percentile=0.0,
+                afhp_samples=[afhp_low],
+                performance_samples=[perf_low],
+                order_index=1,
             )
         )
 
@@ -200,6 +206,7 @@ class JointCoverageSampler:
                 percentile=1.0,
                 afhp_samples=[afhp_high],
                 performance_samples=[perf_high],
+                order_index=2,
             )
         )
 
@@ -251,6 +258,7 @@ class JointCoverageSampler:
                 percentile=percentile,
                 afhp_samples=[afhp],
                 performance_samples=[performance],
+                order_index=len(self._points) + 1,
             )
         )
         self._points.sort(key=lambda s: s.percentile)

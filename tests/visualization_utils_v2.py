@@ -93,6 +93,12 @@ def plot_percentile_to_afhp(points: List[CurvePoint], test_name: str) -> Optiona
     y = [p.afhp for p in points]
     plt.figure(figsize=(8, 5))
     plt.scatter(x, y, s=40, alpha=0.8)
+    # Label with sampling order
+    for p in points:
+        try:
+            plt.annotate(str(p.order), (p.percentile, p.afhp), textcoords="offset points", xytext=(4,4), fontsize=8)
+        except Exception:
+            pass
     plt.xlabel("Percentile (input)")
     plt.ylabel("AFHP (x)")
     plt.title(f"Percentile to AFHP - {test_name}")
@@ -110,6 +116,12 @@ def plot_afhp_to_performance(points: List[CurvePoint], test_name: str) -> Option
     y = [p.performance for p in points]
     plt.figure(figsize=(8, 5))
     plt.scatter(x, y, s=40, alpha=0.8)
+    # Label with sampling order
+    for p in points:
+        try:
+            plt.annotate(str(p.order), (p.afhp, p.performance), textcoords="offset points", xytext=(4,4), fontsize=8)
+        except Exception:
+            pass
     plt.xlabel("AFHP (x)")
     plt.ylabel("Performance (y)")
     plt.title(f"AFHP to Performance - {test_name}")
