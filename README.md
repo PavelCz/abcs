@@ -21,21 +21,21 @@ ACS provides samplers to efficiently sample points along monotonic curves while 
 ## Installation
 
 ```bash
-pip install abcs
+pip install acs
 ```
 
 Or install from source:
 
 ```bash
-git clone https://github.com/yourusername/abcs.git
-cd abcs
+git clone https://github.com/yourusername/acs.git
+cd acs
 pip install -e .
 ```
 
 ## Quick Start (Joint Coverage)
 
 ```python
-from abcs import JointCoverageSampler
+from acs import JointCoverageSampler
 
 def eval_at_percentile(p: float):
   threshold = p * 100.0
