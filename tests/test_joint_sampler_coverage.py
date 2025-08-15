@@ -14,7 +14,7 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 )
 from acs import JointCoverageSampler
-from tests.visualization_utils_v2 import (
+from tests.visualization_utils import (
     initialize_test_run,
     save_joint_artifacts,
     print_artifact_summary,
