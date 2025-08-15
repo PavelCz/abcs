@@ -9,7 +9,8 @@ from typing import List, Tuple, Callable, Optional, Any, Dict
 import numpy as np
 from numpy.typing import NDArray
 
-from acs.joint_sampler import CurvePoint, SamplingResult
+from acs.types import SamplingResult
+from acs.types import CurvePoint
 
 
 class BinarySearchSampler:

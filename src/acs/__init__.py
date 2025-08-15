@@ -4,10 +4,9 @@ ACS - Adaptive Coverage Sampling
 Python library for sampling monotonic curves with coverage guarantees (joint and legacy options).
 """
 
+from .types import CurvePoint, SamplingResult
 from .joint_sampler import (
     JointCoverageSampler,
-    CurvePoint,
-    SamplingResult,
 )
 
 from .sampler import BinarySearchSampler
