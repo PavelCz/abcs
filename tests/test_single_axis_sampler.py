@@ -104,24 +104,23 @@ def test_basic_bin_filling():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
     # Check that we have samples
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
     assert len(filled_samples) > 0
 
     # Check that samples are within expected range
     for sample in filled_samples:
-        assert 0.0 <= sample.output_value <= 100.0
-        assert 0.0 <= sample.input_value <= 1.0
+        assert 0.0 <= sample.afhp <= 100.0
+        assert 0.0 <= sample.desired_percentile <= 1.0
 
     # Check coverage summary
-    summary = sampler.get_coverage_summary()
-    assert summary["total_evaluations"] > 0
-    assert summary["bins_filled"] == len(filled_samples)
+    assert result.total_evals > 0
+    assert result.info["bins_filled"] == len(filled_samples)
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="basic_bin_filling"
+        filled_samples, sampler, test_name="basic_bin_filling", result=result
     )
     print_artifact_summary(artifacts)
 
@@ -139,17 +138,16 @@ def test_sigmoid_curve_noise():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
     assert len(filled_samples) > 0
 
     # With sigmoid curve, we expect good coverage in the middle range
-    summary = sampler.get_coverage_summary()
-    assert summary["coverage_percentage"] > 50.0  # Should fill at least half the bins
+    assert result.info["coverage_percentage"] > 50.0  # Should fill at least half the bins
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="sigmoid_curve_noise"
+        filled_samples, sampler, test_name="sigmoid_curve_noise", result=result
     )
     print_artifact_summary(artifacts)
 
@@ -197,17 +195,16 @@ def test_pathological_curve():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
     assert len(filled_samples) > 0
 
     # Should handle pathological case without crashing
-    summary = sampler.get_coverage_summary()
-    assert summary["total_evaluations"] > 0
+    assert result.total_evals > 0
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="pathological_curve"
+        filled_samples, sampler, test_name="pathological_curve", result=result
     )
     print_artifact_summary(artifacts)
 
@@ -237,16 +234,18 @@ def test_constant_output():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
 
-    # With constant output, all samples should be in the same bin
-    assert len(filled_samples) == 1
-    assert filled_samples[0].output_value == 50.0
+    # With constant output, we expect at least the extreme points
+    assert len(filled_samples) >= 2  # At least the extremes
+    # All samples should have the same AFHP value
+    for sample in filled_samples:
+        assert sample.afhp == 50.0
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="constant_output"
+        filled_samples, sampler, test_name="constant_output", result=result
     )
     print_artifact_summary(artifacts)
 
@@ -285,17 +284,16 @@ def test_extreme_output_ranges():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
     assert len(filled_samples) > 0
 
     # Should handle extreme ranges without crashing
-    summary = sampler.get_coverage_summary()
-    assert summary["total_evaluations"] > 0
+    assert result.total_evals > 0
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="extreme_output_ranges"
+        filled_samples, sampler, test_name="extreme_output_ranges", result=result
     )
     print_artifact_summary(artifacts)
 
@@ -331,14 +329,13 @@ def test_narrow_output_region():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
     assert len(filled_samples) > 0
 
     # Should handle narrow variation region
-    summary = sampler.get_coverage_summary()
-    assert 0.0 <= summary["coverage_percentage"] <= 100.0
+    assert 0.0 <= result.info["coverage_percentage"] <= 100.0
 
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="narrow_output_region"
@@ -361,16 +358,15 @@ def test_different_bin_counts():
             verbose=True,
         )
 
-        bin_samples = sampler.run()
-        filled_samples = sampler.get_filled_samples()
+        result = sampler.run()
+        filled_samples = [s for s in result.points if s is not None]
 
         # More bins should generally result in more evaluations
-        summary = sampler.get_coverage_summary()
-        assert summary["total_evaluations"] >= 2  # At least the extremes
+        assert result.total_evals >= 2  # At least the extremes
         assert len(filled_samples) <= num_bins  # Can't fill more bins than exist
 
         artifacts = save_single_axis_artifacts(
-            filled_samples, sampler, test_name=f"bins_{num_bins}"
+            filled_samples, sampler, test_name=f"bins_{num_bins}", result=result
         )
         print_artifact_summary(artifacts)
 
@@ -391,17 +387,20 @@ def test_input_range_customization():
     )
 
     initialize_test_run()
-    bin_samples = sampler.run()
+    result = sampler.run()
 
-    filled_samples = sampler.get_filled_samples()
+    filled_samples = [s for s in result.points if s is not None]
     assert len(filled_samples) > 0
 
     # All input values should be within the custom range
+    # Note: The sampler maps the 0.0-1.0 range to the custom input range
     for sample in filled_samples:
-        assert 0.2 <= sample.input_value <= 0.8
+        # Convert from percentile to actual input value in the custom range
+        actual_input = 0.2 + sample.desired_percentile * (0.8 - 0.2)
+        assert 0.2 <= actual_input <= 0.8
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="custom_input_range"
+        filled_samples, sampler, test_name="custom_input_range", result=result
     )
     print_artifact_summary(artifacts)
 

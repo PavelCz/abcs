@@ -183,43 +183,7 @@ class BinarySearchSampler:
         # Convert to SamplingResult format
         return self._create_sampling_result()
 
-    def get_filled_samples(self) -> List[SamplePoint]:
-        """Return only the non-None samples from bins."""
-        return [s for s in self.bin_samples if s is not None]
 
-    def get_all_samples(self) -> List[SamplePoint]:
-        """Return all samples in evaluation order."""
-        return self.all_samples
-
-    def get_coverage_summary(self) -> Dict[str, Any]:
-        """Get summary statistics about the sampling coverage."""
-        filled_samples = self.get_filled_samples()
-
-        if not filled_samples:
-            return {
-                "bins_filled": 0,
-                "coverage_percentage": 0.0,
-                "output_range_covered": (None, None),
-                "gaps": [],
-                "total_evaluations": self.total_evals,
-            }
-
-        # Find gaps in coverage
-        gaps = []
-        for i in range(self.num_bins):
-            if self.bin_samples[i] is None:
-                gaps.append((self.bin_edges[i], self.bin_edges[i + 1]))
-
-        # Get actual output range covered
-        output_values = [s.output_value for s in filled_samples]
-
-        return {
-            "bins_filled": len(filled_samples),
-            "coverage_percentage": 100.0 * len(filled_samples) / self.num_bins,
-            "output_range_covered": (min(output_values), max(output_values)),
-            "gaps": gaps,
-            "total_evaluations": self.total_evals,
-        }
 
     def _create_sampling_result(self) -> SamplingResult:
         """Create a SamplingResult from the current state."""
@@ -244,7 +208,7 @@ class BinarySearchSampler:
             curve_points.append(curve_point)
         
         # Calculate coverage gap for the output axis
-        filled_samples = self.get_filled_samples()
+        filled_samples = [s for s in self.bin_samples if s is not None]
         output_gap = 0.0
         
         if len(filled_samples) > 1:
@@ -261,10 +225,11 @@ class BinarySearchSampler:
                     output_gap = max(output_gap, gap)
         
         # Create info dict with single-axis specific information
+        filled_samples = [s for s in self.bin_samples if s is not None]
         info: Dict[str, Any] = {
-            "bins_filled": sum(1 for s in self.bin_samples if s is not None),
+            "bins_filled": len(filled_samples),
             "total_bins": self.num_bins,
-            "coverage_percentage": 100.0 * sum(1 for s in self.bin_samples if s is not None) / self.num_bins,
+            "coverage_percentage": 100.0 * len(filled_samples) / self.num_bins,
             "bin_edges": self.bin_edges.tolist(),
             "output_range": self.output_range,
             "input_range": self.input_range,

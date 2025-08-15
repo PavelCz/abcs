@@ -197,8 +197,15 @@ def plot_input_to_output(samples: List[Any], test_name: str) -> Optional[Path]:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
 
-    x = [s.input_value for s in samples]
-    y = [s.output_value for s in samples]
+    # Handle both old SamplePoint and new CurvePoint formats
+    if hasattr(samples[0], 'afhp'):
+        # New format with CurvePoint
+        x = [s.desired_percentile for s in samples]
+        y = [s.afhp for s in samples]
+    else:
+        # Old format with SamplePoint
+        x = [s.input_value for s in samples]
+        y = [s.output_value for s in samples]
 
     plt.figure(figsize=(8, 5))
     plt.scatter(x, y, s=40, alpha=0.8, c="blue")
@@ -229,9 +236,15 @@ def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[P
     output_values = []
 
     for sample in samples:
-        if "performance" in sample.metadata:
-            performance_values.append(sample.metadata["performance"])
-            output_values.append(sample.output_value)
+        if hasattr(sample, 'afhp'):
+            # New format with CurvePoint
+            performance_values.append(sample.performance)
+            output_values.append(sample.afhp)
+        else:
+            # Old format with SamplePoint
+            if "performance" in sample.metadata:
+                performance_values.append(sample.metadata["performance"])
+                output_values.append(sample.output_value)
 
     if not performance_values:
         return None
@@ -258,7 +271,7 @@ def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[P
 
 
 def plot_bin_coverage(
-    samples: List[Any], sampler: Any, test_name: str
+    samples: List[Any], sampler: Any, test_name: str, result: Any = None
 ) -> Optional[Path]:
     """Plot bin coverage showing which bins were filled."""
     if not samples:
@@ -267,7 +280,7 @@ def plot_bin_coverage(
     artifacts_dir = create_test_artifacts_dir(test_name)
 
     # Create histogram of output values with bin edges
-    output_values = [s.output_value for s in samples]
+    output_values = [s.afhp if hasattr(s, 'afhp') else s.output_value for s in samples]
 
     plt.figure(figsize=(10, 6))
 
@@ -284,13 +297,24 @@ def plot_bin_coverage(
     plt.grid(True, alpha=0.3)
 
     # Add text showing coverage stats
-    summary = sampler.get_coverage_summary()
+    if result and hasattr(result, 'info'):
+        bins_filled = result.info["bins_filled"]
+        total_bins = result.info["total_bins"]
+        coverage_percentage = result.info["coverage_percentage"]
+        total_evals = result.total_evals
+    else:
+        # Fallback to old method if result not provided
+        bins_filled = len(samples)
+        total_bins = sampler.num_bins
+        coverage_percentage = 100.0 * len(samples) / sampler.num_bins
+        total_evals = len(samples)
+    
     plt.text(
         0.02,
         0.98,
-        f"Bins filled: {summary['bins_filled']}/{sampler.num_bins}\n"
-        f"Coverage: {summary['coverage_percentage']:.1f}%\n"
-        f"Total evals: {summary['total_evaluations']}",
+        f"Bins filled: {bins_filled}/{total_bins}\n"
+        f"Coverage: {coverage_percentage:.1f}%\n"
+        f"Total evals: {total_evals}",
         transform=plt.gca().transAxes,
         verticalalignment="top",
         bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
@@ -304,7 +328,7 @@ def plot_bin_coverage(
 
 
 def save_single_axis_artifacts(
-    samples: List[Any], sampler: Any, test_name: str
+    samples: List[Any], sampler: Any, test_name: str, result: Any = None
 ) -> Dict[str, Optional[Path]]:
     """Save all artifacts for single-axis sampler test results."""
     artifacts_dir = create_test_artifacts_dir(test_name)
@@ -312,10 +336,24 @@ def save_single_axis_artifacts(
     # Generate plots
     input_output_plot = plot_input_to_output(samples, test_name)
     output_perf_plot = plot_output_to_performance(samples, test_name)
-    bin_coverage_plot = plot_bin_coverage(samples, sampler, test_name)
+    bin_coverage_plot = plot_bin_coverage(samples, sampler, test_name, result)
 
-    # Get coverage summary
-    summary = sampler.get_coverage_summary()
+    # Get coverage summary from result if available
+    if result and hasattr(result, 'info'):
+        bins_filled = result.info["bins_filled"]
+        total_bins = result.info["total_bins"]
+        coverage_percentage = result.info["coverage_percentage"]
+        total_evals = result.total_evals
+        output_range_covered = (min(s.afhp for s in samples), max(s.afhp for s in samples)) if samples else (None, None)
+        gaps = result.info.get("uncovered_bins", [])
+    else:
+        # Fallback to old method if result not provided
+        bins_filled = len(samples)
+        total_bins = sampler.num_bins
+        coverage_percentage = 100.0 * len(samples) / sampler.num_bins
+        total_evals = len(samples)
+        output_range_covered = (min(s.afhp for s in samples), max(s.afhp for s in samples)) if samples else (None, None)
+        gaps = []
 
     # Save summary
     summary_file = artifacts_dir / "summary.txt"
@@ -323,14 +361,14 @@ def save_single_axis_artifacts(
         f.write(f"Test: {test_name}\n")
         f.write(f"Timestamp: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write(f"Total samples: {len(samples)}\n")
-        f.write(f"Total evaluations: {summary['total_evaluations']}\n")
-        f.write(f"Bins filled: {summary['bins_filled']}/{sampler.num_bins}\n")
-        f.write(f"Coverage percentage: {summary['coverage_percentage']:.2f}%\n")
-        f.write(f"Output range covered: {summary['output_range_covered']}\n")
-        f.write(f"Number of gaps: {len(summary['gaps'])}\n")
-        if summary["gaps"]:
+        f.write(f"Total evaluations: {total_evals}\n")
+        f.write(f"Bins filled: {bins_filled}/{total_bins}\n")
+        f.write(f"Coverage percentage: {coverage_percentage:.2f}%\n")
+        f.write(f"Output range covered: {output_range_covered}\n")
+        f.write(f"Number of gaps: {len(gaps)}\n")
+        if gaps:
             f.write("Gap ranges:\n")
-            for i, (gap_start, gap_end) in enumerate(summary["gaps"]):
+            for i, (gap_start, gap_end) in enumerate(gaps):
                 f.write(f"  Gap {i + 1}: [{gap_start:.2f}, {gap_end:.2f}]\n")
 
     # Save sample points
@@ -338,10 +376,20 @@ def save_single_axis_artifacts(
     with open(points_file, "w") as f:
         f.write("input_value\toutput_value\tthreshold\tperformance\n")
         for sample in samples:
-            threshold = sample.metadata.get("threshold", "N/A")
-            performance = sample.metadata.get("performance", "N/A")
+            if hasattr(sample, 'afhp'):
+                # New format with CurvePoint
+                input_value = sample.desired_percentile
+                output_value = sample.afhp
+                threshold = sample.desired_percentile * 100.0  # Convert percentile to threshold
+                performance = sample.performance
+            else:
+                # Old format with SamplePoint
+                input_value = sample.input_value
+                output_value = sample.output_value
+                threshold = sample.metadata.get("threshold", "N/A")
+                performance = sample.metadata.get("performance", "N/A")
             f.write(
-                f"{sample.input_value:.6f}\t{sample.output_value:.6f}\t{threshold}\t{performance}\n"
+                f"{input_value:.6f}\t{output_value:.6f}\t{threshold}\t{performance}\n"
             )
 
     return {

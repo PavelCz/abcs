@@ -174,8 +174,8 @@ sampler = BinarySearchSampler(
     return_bins=10,
     max_additional_evals=25
 )
-samples = sampler.run_with_return_refinement()
-all_samples = sampler.get_filled_samples() + sampler.get_return_refinement_samples()
+result = sampler.run()
+all_samples = result.points
 ```
 
 ### Custom Input Transformation
@@ -200,7 +200,7 @@ sampler = BinarySearchSampler(
     unbounded_mode=True,  # Removes evaluation limits for convergence
     verbose=True
 )
-samples = sampler.run_with_return_refinement()
+result = sampler.run()
 # Achieves theoretical convergence guarantees with safety mechanisms
 ```
 
@@ -233,8 +233,8 @@ samples = sampler.run_with_return_refinement()
 
 ### Debugging Tools
 - Set `verbose=True` for algorithm progress output
-- Use `get_coverage_summary()` to inspect coverage statistics
-- Use `get_filled_samples()` and `get_return_refinement_samples()` to examine samples
+- Use `result.info` to inspect coverage statistics
+- Use `result.points` to examine samples
 - Plot results to visualize coverage patterns
 
 ## Dependencies
