@@ -1,449 +1,266 @@
 """
-Adaptive Binary Coverage Search (ABCS) algorithm for efficient monotonic curve sampling.
+Legacy binary-search sampler exposing the same public interface as JointCoverageSampler.
 
-This module provides a generic implementation of the ABCS algorithm used for 
-efficiently sampling points along monotonic curves with coverage guarantees.
+This module provides a compatibility implementation that matches the constructor and
+the return types of the joint sampler. Internally it focuses on covering the AFHP
+axis using binary search in percentile space and reports coverage metrics for both
+axes using the collected points.
 """
 
-from typing import List, Tuple, Callable, Optional, Any, Dict
-import numpy as np
-from numpy.typing import NDArray
+from dataclasses import dataclass
+from typing import Callable, List, Optional, Tuple
 
-from acs.types import SamplePoint
+import numpy as np
+
+from acs.joint_sampler import CurvePoint, SamplingResult
+
+
+@dataclass
+class _Obs:
+    percentile: float
+    afhp: float
+    performance: float
+    order: int
 
 
 class BinarySearchSampler:
     """
-    Adaptive Binary Coverage Search (ABCS) sampler for monotonic curves.
+    Adaptive sampler with the same interface as JointCoverageSampler.
 
-    This sampler efficiently fills bins along the output axis by using
-    binary search in the input space. It operates in two phases:
-    1. Phase 1: AFHP coverage via binary search
-    2. Phase 2: Return value refinement (optional)
+    Constructor parameters and the run() return value mirror those of
+    `JointCoverageSampler` so the two samplers can be swapped by users.
     """
 
     def __init__(
         self,
-        eval_function: Callable[[float], Tuple[float, Dict[str, Any]]],
-        num_bins: int,
-        input_range: Tuple[float, float] = (0.0, 100.0),
-        output_range: Tuple[float, float] = (0.0, 100.0),
-        input_to_threshold: Optional[Callable[[float], float]] = None,
-        verbose: bool = True,
-        return_bins: int = 0,
-        max_additional_evals: int = 20,
-    ):
-        """
-        Initialize the ABCS sampler.
+        *,
+        eval_at_percentile: Callable[[float], Tuple[float, float]],
+        eval_at_lower_extreme: Callable[[], Tuple[float, float]],
+        eval_at_upper_extreme: Callable[[], Tuple[float, float]],
+        coverage_fraction: float,
+        max_total_evals: int,
+    ) -> None:
+        if not (0.0 < coverage_fraction <= 1.0):
+            raise ValueError("coverage_fraction must be in (0, 1]")
+        if max_total_evals < 2:
+            raise ValueError("max_total_evals must be at least 2 to include extremes")
 
-        Args:
-            eval_function: Function that takes an input value and returns
-                          (output_value, metadata_dict)
-            num_bins: Number of bins to divide the output space into
-            input_range: Range of valid input values (min, max)
-            output_range: Range of expected output values (min, max)
-            input_to_threshold: Optional function to convert input values
-                               to actual thresholds for evaluation
-            verbose: Whether to print progress messages
-            return_bins: Number of return bins for curve smoothing (0 = disabled)
-            max_additional_evals: Maximum additional evaluations for return refinement
-        """
-        self.eval_function = eval_function
-        self.num_bins = num_bins
-        self.input_range = input_range
-        self.output_range = output_range
-        self.input_to_threshold = input_to_threshold or (lambda x: x)
-        self.verbose = verbose
-        self.return_bins = return_bins
-        self.max_additional_evals = max_additional_evals
+        self._eval_p = eval_at_percentile
+        self._eval_lo = eval_at_lower_extreme
+        self._eval_hi = eval_at_upper_extreme
+        self._coverage_fraction = coverage_fraction
+        self._max_total_evals = max_total_evals
 
-        # Initialize bins
-        self.bin_edges: NDArray[np.float64] = np.linspace(
-            output_range[0], output_range[1], num_bins + 1
-        )
-        self.bin_samples: List[Optional[SamplePoint]] = [None] * num_bins
-        self.all_samples: List[SamplePoint] = []
-        self.return_refinement_samples: List[SamplePoint] = []
-        self.total_evals: int = 0
+        # Derived AFHP-bin count chosen to satisfy the requested fraction on x-axis
+        self._num_bins = max(2, int(np.ceil(1.0 / coverage_fraction)))
 
-    def determine_bin(self, output_value: float) -> int:
-        """Determine which bin an output value falls into."""
-        if output_value < self.output_range[0] or output_value > self.output_range[1]:
-            raise ValueError(
-                f"Output value {output_value} outside range {self.output_range}"
-            )
+        self._observations: List[_Obs] = []
+        self._total_evals: int = 0
+        self._early_stop_reason: Optional[str] = None
 
-        # Handle edge case where output equals max value
-        if output_value == self.output_range[1]:
-            return self.num_bins - 1
+        # Computed after seeding extremes
+        self._afhp_min: Optional[float] = None
+        self._afhp_max: Optional[float] = None
+        self._bin_edges: Optional[np.ndarray] = None
+        self._bin_repr: List[Optional[_Obs]] = [None] * self._num_bins
 
-        # Find the bin
-        for i in range(len(self.bin_edges) - 1):
-            if self.bin_edges[i] <= output_value < self.bin_edges[i + 1]:
+    # -----------------
+    # Public entrypoint
+    # -----------------
+
+    def run(self) -> SamplingResult:
+        self._seed_extremes()
+        if self._coverage_satisfied():
+            return self._build_result()
+
+        # Binary-search fill in percentile space to populate AFHP bins
+        left_p = 0.0
+        right_p = 1.0
+        left_bin = self._determine_bin(self._bin_repr_non_none(0).afhp)
+        right_bin = self._determine_bin(self._bin_repr_non_none(-1).afhp)
+        if left_bin > right_bin:
+            left_bin, right_bin = right_bin, left_bin
+
+        self._binary_fill(left_p, right_p, left_bin, right_bin)
+
+        return self._build_result()
+
+    # -----------------
+    # Initialization
+    # -----------------
+
+    def _seed_extremes(self) -> None:
+        if self._observations:
+            return
+        afhp_lo, perf_lo = self._safe_eval_lo()
+        self._add_observation(percentile=0.0, afhp=afhp_lo, performance=perf_lo)
+
+        afhp_hi, perf_hi = self._safe_eval_hi()
+        self._add_observation(percentile=1.0, afhp=afhp_hi, performance=perf_hi)
+
+        # Establish AFHP range and bin edges
+        self._afhp_min = min(afhp_lo, afhp_hi)
+        self._afhp_max = max(afhp_lo, afhp_hi)
+        self._bin_edges = np.linspace(self._afhp_min, self._afhp_max, self._num_bins + 1)
+
+        # Assign extremes to bins
+        self._assign_to_bin(self._observations[0])
+        self._assign_to_bin(self._observations[1])
+
+    # -------------
+    # Evaluations
+    # -------------
+
+    def _safe_eval_p(self, p: float) -> Tuple[float, float]:
+        afhp, perf = self._eval_p(float(np.clip(p, 0.0, 1.0)))
+        self._validate_outputs(afhp, perf)
+        self._total_evals += 1
+        # Update AFHP range if needed and edges accordingly
+        if self._afhp_min is None or afhp < self._afhp_min:
+            self._afhp_min = afhp
+        if self._afhp_max is None or afhp > self._afhp_max:
+            self._afhp_max = afhp
+        if self._afhp_min is not None and self._afhp_max is not None and self._afhp_max > self._afhp_min:
+            self._bin_edges = np.linspace(self._afhp_min, self._afhp_max, self._num_bins + 1)
+        return afhp, perf
+
+    def _safe_eval_lo(self) -> Tuple[float, float]:
+        afhp, perf = self._eval_lo()
+        self._validate_outputs(afhp, perf)
+        self._total_evals += 1
+        return afhp, perf
+
+    def _safe_eval_hi(self) -> Tuple[float, float]:
+        afhp, perf = self._eval_hi()
+        self._validate_outputs(afhp, perf)
+        self._total_evals += 1
+        return afhp, perf
+
+    @staticmethod
+    def _validate_outputs(afhp: float, performance: float) -> None:
+        for name, value in ("afhp", afhp), ("performance", performance):
+            if value != value:
+                raise ValueError(f"{name} is NaN from evaluation")
+            if value == float("inf") or value == float("-inf"):
+                raise ValueError(f"{name} is infinite from evaluation")
+
+    # -----------------
+    # Bin utilities
+    # -----------------
+
+    def _determine_bin(self, afhp: float) -> int:
+        assert self._bin_edges is not None
+        if afhp >= self._bin_edges[-1]:
+            return self._num_bins - 1
+        for i in range(self._num_bins):
+            if self._bin_edges[i] <= afhp < self._bin_edges[i + 1]:
                 return i
+        return min(max(int(self._num_bins / 2), 0), self._num_bins - 1)
 
-        # This should not happen given the checks above
-        raise ValueError(f"Could not find bin for output value {output_value}")
+    def _assign_to_bin(self, obs: _Obs) -> None:
+        idx = self._determine_bin(obs.afhp)
+        if self._bin_repr[idx] is None:
+            self._bin_repr[idx] = obs
 
-    def bins_remaining(self, left_idx: int, right_idx: int) -> bool:
-        """Check if there are empty bins in the given range."""
-        for i in range(left_idx + 1, right_idx):
-            if self.bin_samples[i] is None:
+    def _bin_repr_non_none(self, index: int) -> _Obs:
+        candidates = [b for b in self._bin_repr if b is not None]
+        if not candidates:
+            raise RuntimeError("No observations assigned to bins")
+        return candidates[index]
+
+    def _bins_remaining(self, left_bin: int, right_bin: int) -> bool:
+        for i in range(left_bin + 1, right_bin):
+            if 0 <= i < self._num_bins and self._bin_repr[i] is None:
                 return True
         return False
 
-    def evaluate_at_input(self, input_value: float) -> SamplePoint:
-        """Evaluate the function at the given input value."""
-        threshold = self.input_to_threshold(input_value)
-        output_value, metadata = self.eval_function(threshold)
-        self.total_evals += 1
+    # -----------------
+    # Core search
+    # -----------------
 
-        sample = SamplePoint(
-            input_value=input_value, output_value=output_value, metadata=metadata
-        )
-        self.all_samples.append(sample)
-        return sample
+    def _binary_fill(self, left_p: float, right_p: float, left_bin: int, right_bin: int) -> None:
+        if self._total_evals >= self._max_total_evals:
+            self._early_stop_reason = "max_total_evals"
+            return
+        if right_bin - left_bin <= 1:
+            return
 
-    def binary_search_fill(
-        self,
-        left_input: float,
-        right_input: float,
-        left_bin_idx: int,
-        right_bin_idx: int,
-    ) -> int:
-        """
-        Recursively fill bins using binary search.
+        mid_p = 0.5 * (left_p + right_p)
+        afhp, perf = self._safe_eval_p(mid_p)
+        obs = self._add_observation(mid_p, afhp, perf)
+        self._assign_to_bin(obs)
 
-        Returns the number of evaluations performed.
-        """
-        # Calculate middle input value
-        middle_input = (left_input + right_input) / 2
+        mid_bin = self._determine_bin(afhp)
 
-        # Evaluate at middle point
-        sample = self.evaluate_at_input(middle_input)
+        if self._bins_remaining(left_bin, mid_bin):
+            self._binary_fill(left_p, mid_p, left_bin, mid_bin)
+            if self._early_stop_reason is not None:
+                return
+        if self._bins_remaining(mid_bin, right_bin):
+            self._binary_fill(mid_p, right_p, mid_bin, right_bin)
+            if self._early_stop_reason is not None:
+                return
 
-        # Determine which bin this sample falls into
-        bin_idx = self.determine_bin(sample.output_value)
+    # -----------------
+    # Point management
+    # -----------------
 
-        # Only add to bin if it's empty
-        if self.bin_samples[bin_idx] is None:
-            self.bin_samples[bin_idx] = sample
+    def _add_observation(self, percentile: float, afhp: float, performance: float) -> _Obs:
+        order = len(self._observations) + 1
+        obs = _Obs(percentile=percentile, afhp=afhp, performance=performance, order=order)
+        self._observations.append(obs)
+        return obs
 
-        # Recursively search left and right if bins remain
-        evals = 1
+    # -----------------
+    # Coverage & result
+    # -----------------
 
-        if self.bins_remaining(left_bin_idx, bin_idx):
-            evals += self.binary_search_fill(
-                left_input, middle_input, left_bin_idx, bin_idx
+    def _coverage_satisfied(self) -> bool:
+        x_gap, y_gap = self._compute_gaps()
+        return x_gap <= self._coverage_fraction and y_gap <= self._coverage_fraction
+
+    def _compute_gaps(self) -> Tuple[float, float]:
+        if not self._observations:
+            return 1.0, 1.0
+        by_x = sorted(self._observations, key=lambda o: o.afhp)
+        x_min = by_x[0].afhp
+        x_max = by_x[-1].afhp
+        x_gap = 0.0
+        if x_max > x_min:
+            for i in range(len(by_x) - 1):
+                gap = (by_x[i + 1].afhp - by_x[i].afhp) / (x_max - x_min)
+                if gap > x_gap:
+                    x_gap = gap
+        by_y = sorted(self._observations, key=lambda o: o.performance)
+        y_min = by_y[0].performance
+        y_max = by_y[-1].performance
+        y_gap = 0.0
+        if y_max > y_min:
+            for i in range(len(by_y) - 1):
+                gap = (by_y[i + 1].performance - by_y[i].performance) / (y_max - y_min)
+                if gap > y_gap:
+                    y_gap = gap
+        return x_gap, y_gap
+
+    def _build_result(self) -> SamplingResult:
+        x_gap, y_gap = self._compute_gaps()
+        points = [
+            CurvePoint(
+                desired_percentile=obs.percentile,
+                afhp=obs.afhp,
+                performance=obs.performance,
+                repeats_used=1,
+                order=obs.order,
             )
-
-        if self.bins_remaining(bin_idx, right_bin_idx):
-            evals += self.binary_search_fill(
-                middle_input, right_input, bin_idx, right_bin_idx
-            )
-
-        return evals
-
-    def run(self) -> List[Optional[SamplePoint]]:
-        """
-        Run the adaptive sampling algorithm (Phase 1 only).
-
-        Returns a list of samples, one per bin (where possible).
-        """
-        # Evaluate at extremes
-        left_sample = self.evaluate_at_input(self.input_range[0])
-        right_sample = self.evaluate_at_input(self.input_range[1])
-
-        # Place extreme samples in appropriate bins
-        left_bin = self.determine_bin(left_sample.output_value)
-        right_bin = self.determine_bin(right_sample.output_value)
-
-        self.bin_samples[left_bin] = left_sample
-        self.bin_samples[right_bin] = right_sample
-
-        # Fill remaining bins using binary search
-        if left_bin < right_bin:
-            self.binary_search_fill(
-                self.input_range[0], self.input_range[1], left_bin, right_bin
-            )
-
-        if self.verbose:
-            print(f"Total evaluations: {self.total_evals}")
-            print(
-                f"Bins filled: {sum(1 for s in self.bin_samples if s is not None)}/{self.num_bins}"
-            )
-
-        return self.bin_samples
-
-    def get_filled_samples(self) -> List[SamplePoint]:
-        """Return only the non-None samples from bins."""
-        return [s for s in self.bin_samples if s is not None]
-
-    def get_all_samples(self) -> List[SamplePoint]:
-        """Return all samples in evaluation order."""
-        return self.all_samples
-
-    def get_coverage_summary(self) -> Dict[str, Any]:
-        """Get summary statistics about the sampling coverage."""
-        filled_samples = self.get_filled_samples()
-
-        if not filled_samples:
-            return {
-                "bins_filled": 0,
-                "coverage_percentage": 0.0,
-                "output_range_covered": (None, None),
-                "gaps": [],
-                "total_evaluations": self.total_evals,
-            }
-
-        # Find gaps in coverage
-        gaps = []
-        for i in range(self.num_bins):
-            if self.bin_samples[i] is None:
-                gaps.append((self.bin_edges[i], self.bin_edges[i + 1]))
-
-        # Get actual output range covered
-        output_values = [s.output_value for s in filled_samples]
-
-        return {
-            "bins_filled": len(filled_samples),
-            "coverage_percentage": 100.0 * len(filled_samples) / self.num_bins,
-            "output_range_covered": (min(output_values), max(output_values)),
-            "gaps": gaps,
-            "total_evaluations": self.total_evals,
-        }
-
-    def extract_return_value(self, sample: SamplePoint) -> float:
-        """Extract return value from sample metadata."""
-        # Try different possible keys for return value
-        metadata = sample.metadata
-        if "summary" in metadata:
-            summary = metadata["summary"]
-            if isinstance(summary, dict):
-                # Try different split names
-                for split in ["test", "val", "eval"]:
-                    if split in summary and "return_mean" in summary[split]:
-                        return summary[split]["return_mean"]
-
-        # Fallback: look for return_mean directly in metadata
-        if "return_mean" in metadata:
-            return metadata["return_mean"]
-
-        # Final fallback: assume it's stored as 'return'
-        if "return" in metadata:
-            return metadata["return"]
-
-        raise ValueError(
-            f"Could not extract return value from sample metadata: {metadata}"
+            for obs in self._observations
+        ]
+        return SamplingResult(
+            points=points,
+            coverage_x_max_gap=x_gap,
+            coverage_y_max_gap=y_gap,
+            total_evals=self._total_evals,
+            early_stop_reason=self._early_stop_reason,
+            monotonicity_violations_remaining=False,
         )
 
-    def fill_return_gaps(
-        self, initial_samples: List[Optional[SamplePoint]]
-    ) -> List[SamplePoint]:
-        """
-        Fill gaps in return values using binary search (Phase 2).
 
-        Args:
-            initial_samples: Samples from the initial AFHP-based binary search
-
-        Returns:
-            List of additional samples to fill return gaps
-        """
-        if self.return_bins == 0:
-            return []
-
-        # Extract valid samples and their returns
-        valid_samples = [s for s in initial_samples if s is not None]
-        if len(valid_samples) < 2:
-            return []
-
-        # Extract return values
-        try:
-            returns = [self.extract_return_value(s) for s in valid_samples]
-        except ValueError as e:
-            if self.verbose:
-                print(f"Warning: Could not extract return values for gap filling: {e}")
-            return []
-
-        min_return = min(returns)
-        max_return = max(returns)
-
-        if max_return <= min_return:
-            if self.verbose:
-                print("Warning: All return values are equal, cannot fill gaps")
-            return []
-
-        # Create return bins
-        return_bin_edges = np.linspace(min_return, max_return, self.return_bins + 1)
-
-        # Find which return bins are already filled
-        filled_return_bins = set()
-        for ret in returns:
-            # Find which bin this return belongs to
-            bin_idx = int(
-                (ret - min_return) / (max_return - min_return) * self.return_bins
-            )
-            if bin_idx >= self.return_bins:
-                bin_idx = self.return_bins - 1
-            filled_return_bins.add(bin_idx)
-
-        # Identify empty return bins
-        empty_return_bins = []
-        for i in range(self.return_bins):
-            if i not in filled_return_bins:
-                target_return_min = return_bin_edges[i]
-                target_return_max = return_bin_edges[i + 1]
-                target_return = (target_return_min + target_return_max) / 2
-                empty_return_bins.append(
-                    (i, target_return, target_return_min, target_return_max)
-                )
-
-        if self.verbose and empty_return_bins:
-            print(f"Found {len(empty_return_bins)} empty return bins to fill")
-
-        # Fill empty return bins using binary search
-        additional_samples = []
-        evals_used = 0
-
-        for bin_idx, target_return, return_min, return_max in empty_return_bins:
-            if evals_used >= self.max_additional_evals:
-                break
-
-            sample = self.search_for_return_range(
-                valid_samples, target_return, return_min, return_max
-            )
-            if sample is not None:
-                additional_samples.append(sample)
-                self.return_refinement_samples.append(sample)
-                evals_used += 1
-
-        if self.verbose and additional_samples:
-            print(f"Added {len(additional_samples)} samples for return gap filling")
-
-        return additional_samples
-
-    def search_for_return_range(
-        self,
-        existing_samples: List[SamplePoint],
-        target_return: float,
-        return_min: float,
-        return_max: float,
-        max_iterations: int = 10,
-    ) -> Optional[SamplePoint]:
-        """
-        Binary search for an input value that produces a return in the specified range.
-
-        Args:
-            existing_samples: Existing samples to guide the search
-            target_return: Target return value (midpoint of range)
-            return_min: Minimum acceptable return value
-            return_max: Maximum acceptable return value
-            max_iterations: Maximum binary search iterations
-
-        Returns:
-            SamplePoint if found, None if not found within max_iterations
-        """
-        # Sort existing samples by return value to use for interpolation
-        samples_with_returns = []
-        for sample in existing_samples:
-            try:
-                ret = self.extract_return_value(sample)
-                samples_with_returns.append((sample, ret))
-            except ValueError:
-                continue
-
-        if len(samples_with_returns) < 2:
-            return None
-
-        samples_with_returns.sort(key=lambda x: x[1])  # Sort by return value
-
-        # Find the two samples that bracket the target return
-        lower_sample, lower_return = samples_with_returns[0]
-        upper_sample, upper_return = samples_with_returns[-1]
-
-        # Find the best bracketing samples
-        for i in range(len(samples_with_returns) - 1):
-            sample1, return1 = samples_with_returns[i]
-            sample2, return2 = samples_with_returns[i + 1]
-
-            if return1 <= target_return <= return2:
-                lower_sample, lower_return = sample1, return1
-                upper_sample, upper_return = sample2, return2
-                break
-
-        # If target is outside the range of existing samples, we can't find it
-        if target_return < lower_return or target_return > upper_return:
-            return None
-
-        # Binary search between the bracketing input values
-        left_input = lower_sample.input_value
-        right_input = upper_sample.input_value
-
-        for _ in range(max_iterations):
-            # Calculate middle input value
-            middle_input = (left_input + right_input) / 2
-
-            # Evaluate at middle point
-            sample = self.evaluate_at_input(middle_input)
-
-            try:
-                sample_return = self.extract_return_value(sample)
-            except ValueError:
-                # If we can't extract return, skip this sample
-                return None
-
-            # Check if we found a return in the target range
-            if return_min <= sample_return <= return_max:
-                return sample
-
-            # Update search bounds based on monotonicity assumption
-            if sample_return < target_return:
-                left_input = middle_input
-            else:
-                right_input = middle_input
-
-            # Stop if search space is too small
-            if abs(right_input - left_input) < 1e-6:
-                break
-
-        return None
-
-    def run_with_return_refinement(self) -> List[Optional[SamplePoint]]:
-        """
-        Run the enhanced sampling algorithm with return gap filling.
-
-        This is the main entry point for the two-phase ABCS algorithm:
-        1. Phase 1: Standard AFHP-based binary search
-        2. Phase 2: Return gap filling (if return_bins > 0)
-
-        Returns:
-            Combined list of samples from both phases
-        """
-        # Phase 1: Standard AFHP coverage
-        if self.verbose:
-            print("Phase 1: AFHP coverage using binary search...")
-
-        afhp_samples = self.run()
-
-        # Phase 2: Return gap filling
-        if self.return_bins > 0:
-            if self.verbose:
-                print(
-                    f"Phase 2: Return gap filling with {self.return_bins} return bins..."
-                )
-
-            self.fill_return_gaps(afhp_samples)
-
-            # Return combined samples, but maintain the original bin structure
-            # The additional samples are stored separately in return_refinement_samples
-            return afhp_samples
-        else:
-            return afhp_samples
-
-    def get_all_samples_including_refinement(self) -> List[SamplePoint]:
-        """Return all samples including those from return refinement."""
-        return self.all_samples + self.return_refinement_samples
-
-    def get_return_refinement_samples(self) -> List[SamplePoint]:
-        """Return only the samples added during return refinement."""
-        return self.return_refinement_samples
