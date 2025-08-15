@@ -144,7 +144,9 @@ def test_sigmoid_curve_noise():
     assert len(filled_samples) > 0
 
     # With sigmoid curve, we expect good coverage in the middle range
-    assert result.info["coverage_percentage"] > 50.0  # Should fill at least half the bins
+    assert (
+        result.info["coverage_percentage"] > 50.0
+    )  # Should fill at least half the bins
 
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="sigmoid_curve_noise", result=result

@@ -183,8 +183,6 @@ class BinarySearchSampler:
         # Convert to SamplingResult format
         return self._create_sampling_result()
 
-
-
     def _create_sampling_result(self) -> SamplingResult:
         """Create a SamplingResult from the current state."""
         # Convert SamplePoints to CurvePoints
@@ -194,10 +192,10 @@ class BinarySearchSampler:
             percentile = (sample.input_value - self.input_range[0]) / (
                 self.input_range[1] - self.input_range[0]
             )
-            
+
             # Extract performance from metadata if available, otherwise use output_value
             performance = sample.metadata.get("performance", sample.output_value)
-            
+
             curve_point = CurvePoint(
                 desired_percentile=percentile,
                 afhp=sample.output_value,  # output_value is treated as AFHP
@@ -206,24 +204,25 @@ class BinarySearchSampler:
                 order=i + 1,  # Order of evaluation
             )
             curve_points.append(curve_point)
-        
+
         # Calculate coverage gap for the output axis
         filled_samples = [s for s in self.bin_samples if s is not None]
         output_gap = 0.0
-        
+
         if len(filled_samples) > 1:
             sorted_samples = sorted(filled_samples, key=lambda s: s.output_value)
             output_min = sorted_samples[0].output_value
             output_max = sorted_samples[-1].output_value
-            
+
             if output_max > output_min:
                 # Find maximum normalized gap between consecutive samples
                 for i in range(len(sorted_samples) - 1):
-                    gap = (sorted_samples[i + 1].output_value - sorted_samples[i].output_value) / (
-                        output_max - output_min
-                    )
+                    gap = (
+                        sorted_samples[i + 1].output_value
+                        - sorted_samples[i].output_value
+                    ) / (output_max - output_min)
                     output_gap = max(output_gap, gap)
-        
+
         # Create info dict with single-axis specific information
         filled_samples = [s for s in self.bin_samples if s is not None]
         info: Dict[str, Any] = {
@@ -234,7 +233,7 @@ class BinarySearchSampler:
             "output_range": self.output_range,
             "input_range": self.input_range,
         }
-        
+
         # Find gaps in bin coverage
         gaps = []
         for i in range(self.num_bins):
@@ -242,7 +241,7 @@ class BinarySearchSampler:
                 gaps.append((self.bin_edges[i], self.bin_edges[i + 1]))
         if gaps:
             info["uncovered_bins"] = gaps
-        
+
         return SamplingResult(
             points=curve_points,
             coverage_x_max_gap=output_gap,  # For single-axis, x-axis represents the output

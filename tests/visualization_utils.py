@@ -281,7 +281,7 @@ def plot_bin_coverage(
     total_bins = result.info["total_bins"]
     coverage_percentage = result.info["coverage_percentage"]
     total_evals = result.total_evals
-    
+
     plt.text(
         0.02,
         0.98,
@@ -316,7 +316,11 @@ def save_single_axis_artifacts(
     total_bins = result.info["total_bins"]
     coverage_percentage = result.info["coverage_percentage"]
     total_evals = result.total_evals
-    output_range_covered = (min(s.afhp for s in samples), max(s.afhp for s in samples)) if samples else (None, None)
+    output_range_covered = (
+        (min(s.afhp for s in samples), max(s.afhp for s in samples))
+        if samples
+        else (None, None)
+    )
     gaps = result.info.get("uncovered_bins", [])
 
     # Save summary
@@ -342,7 +346,9 @@ def save_single_axis_artifacts(
         for sample in samples:
             input_value = sample.desired_percentile
             output_value = sample.afhp
-            threshold = sample.desired_percentile * 100.0  # Convert percentile to threshold
+            threshold = (
+                sample.desired_percentile * 100.0
+            )  # Convert percentile to threshold
             performance = sample.performance
             f.write(
                 f"{input_value:.6f}\t{output_value:.6f}\t{threshold}\t{performance}\n"
