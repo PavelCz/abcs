@@ -197,15 +197,9 @@ def plot_input_to_output(samples: List[Any], test_name: str) -> Optional[Path]:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
 
-    # Handle both old SamplePoint and new CurvePoint formats
-    if hasattr(samples[0], 'afhp'):
-        # New format with CurvePoint
-        x = [s.desired_percentile for s in samples]
-        y = [s.afhp for s in samples]
-    else:
-        # Old format with SamplePoint
-        x = [s.input_value for s in samples]
-        y = [s.output_value for s in samples]
+    # Extract data from CurvePoint objects
+    x = [s.desired_percentile for s in samples]
+    y = [s.afhp for s in samples]
 
     plt.figure(figsize=(8, 5))
     plt.scatter(x, y, s=40, alpha=0.8, c="blue")
@@ -227,27 +221,13 @@ def plot_input_to_output(samples: List[Any], test_name: str) -> Optional[Path]:
 
 
 def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[Path]:
-    """Plot output values (AFHP) to performance values (from metadata)."""
+    """Plot output values (AFHP) to performance values."""
     if not samples:
         return None
 
-    # Extract performance values from metadata
-    performance_values = []
-    output_values = []
-
-    for sample in samples:
-        if hasattr(sample, 'afhp'):
-            # New format with CurvePoint
-            performance_values.append(sample.performance)
-            output_values.append(sample.afhp)
-        else:
-            # Old format with SamplePoint
-            if "performance" in sample.metadata:
-                performance_values.append(sample.metadata["performance"])
-                output_values.append(sample.output_value)
-
-    if not performance_values:
-        return None
+    # Extract performance values from CurvePoint objects
+    performance_values = [s.performance for s in samples]
+    output_values = [s.afhp for s in samples]
 
     artifacts_dir = create_test_artifacts_dir(test_name)
 
@@ -271,7 +251,7 @@ def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[P
 
 
 def plot_bin_coverage(
-    samples: List[Any], sampler: Any, test_name: str, result: Any = None
+    samples: List[Any], sampler: Any, test_name: str, result: Any
 ) -> Optional[Path]:
     """Plot bin coverage showing which bins were filled."""
     if not samples:
@@ -280,7 +260,7 @@ def plot_bin_coverage(
     artifacts_dir = create_test_artifacts_dir(test_name)
 
     # Create histogram of output values with bin edges
-    output_values = [s.afhp if hasattr(s, 'afhp') else s.output_value for s in samples]
+    output_values = [s.afhp for s in samples]
 
     plt.figure(figsize=(10, 6))
 
@@ -297,17 +277,10 @@ def plot_bin_coverage(
     plt.grid(True, alpha=0.3)
 
     # Add text showing coverage stats
-    if result and hasattr(result, 'info'):
-        bins_filled = result.info["bins_filled"]
-        total_bins = result.info["total_bins"]
-        coverage_percentage = result.info["coverage_percentage"]
-        total_evals = result.total_evals
-    else:
-        # Fallback to old method if result not provided
-        bins_filled = len(samples)
-        total_bins = sampler.num_bins
-        coverage_percentage = 100.0 * len(samples) / sampler.num_bins
-        total_evals = len(samples)
+    bins_filled = result.info["bins_filled"]
+    total_bins = result.info["total_bins"]
+    coverage_percentage = result.info["coverage_percentage"]
+    total_evals = result.total_evals
     
     plt.text(
         0.02,
@@ -328,7 +301,7 @@ def plot_bin_coverage(
 
 
 def save_single_axis_artifacts(
-    samples: List[Any], sampler: Any, test_name: str, result: Any = None
+    samples: List[Any], sampler: Any, test_name: str, result: Any
 ) -> Dict[str, Optional[Path]]:
     """Save all artifacts for single-axis sampler test results."""
     artifacts_dir = create_test_artifacts_dir(test_name)
@@ -338,22 +311,13 @@ def save_single_axis_artifacts(
     output_perf_plot = plot_output_to_performance(samples, test_name)
     bin_coverage_plot = plot_bin_coverage(samples, sampler, test_name, result)
 
-    # Get coverage summary from result if available
-    if result and hasattr(result, 'info'):
-        bins_filled = result.info["bins_filled"]
-        total_bins = result.info["total_bins"]
-        coverage_percentage = result.info["coverage_percentage"]
-        total_evals = result.total_evals
-        output_range_covered = (min(s.afhp for s in samples), max(s.afhp for s in samples)) if samples else (None, None)
-        gaps = result.info.get("uncovered_bins", [])
-    else:
-        # Fallback to old method if result not provided
-        bins_filled = len(samples)
-        total_bins = sampler.num_bins
-        coverage_percentage = 100.0 * len(samples) / sampler.num_bins
-        total_evals = len(samples)
-        output_range_covered = (min(s.afhp for s in samples), max(s.afhp for s in samples)) if samples else (None, None)
-        gaps = []
+    # Get coverage summary from result
+    bins_filled = result.info["bins_filled"]
+    total_bins = result.info["total_bins"]
+    coverage_percentage = result.info["coverage_percentage"]
+    total_evals = result.total_evals
+    output_range_covered = (min(s.afhp for s in samples), max(s.afhp for s in samples)) if samples else (None, None)
+    gaps = result.info.get("uncovered_bins", [])
 
     # Save summary
     summary_file = artifacts_dir / "summary.txt"
@@ -376,18 +340,10 @@ def save_single_axis_artifacts(
     with open(points_file, "w") as f:
         f.write("input_value\toutput_value\tthreshold\tperformance\n")
         for sample in samples:
-            if hasattr(sample, 'afhp'):
-                # New format with CurvePoint
-                input_value = sample.desired_percentile
-                output_value = sample.afhp
-                threshold = sample.desired_percentile * 100.0  # Convert percentile to threshold
-                performance = sample.performance
-            else:
-                # Old format with SamplePoint
-                input_value = sample.input_value
-                output_value = sample.output_value
-                threshold = sample.metadata.get("threshold", "N/A")
-                performance = sample.metadata.get("performance", "N/A")
+            input_value = sample.desired_percentile
+            output_value = sample.afhp
+            threshold = sample.desired_percentile * 100.0  # Convert percentile to threshold
+            performance = sample.performance
             f.write(
                 f"{input_value:.6f}\t{output_value:.6f}\t{threshold}\t{performance}\n"
             )

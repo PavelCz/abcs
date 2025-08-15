@@ -338,7 +338,7 @@ def test_narrow_output_region():
     assert 0.0 <= result.info["coverage_percentage"] <= 100.0
 
     artifacts = save_single_axis_artifacts(
-        filled_samples, sampler, test_name="narrow_output_region"
+        filled_samples, sampler, test_name="narrow_output_region", result=result
     )
     print_artifact_summary(artifacts)
 
