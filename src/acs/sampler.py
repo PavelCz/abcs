@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from acs.types import SamplePoint
+from acs.joint_sampler import CurvePoint, SamplingResult
 
 
 class BinarySearchSampler:
@@ -150,11 +151,11 @@ class BinarySearchSampler:
 
         return evals
 
-    def run(self) -> List[Optional[SamplePoint]]:
+    def run(self) -> SamplingResult:
         """
         Run the adaptive sampling algorithm (Phase 1 only).
 
-        Returns a list of samples, one per bin (where possible).
+        Returns a SamplingResult with curve points and coverage information.
         """
         # Evaluate at extremes
         left_sample = self.evaluate_at_input(self.input_range[0])
@@ -179,7 +180,8 @@ class BinarySearchSampler:
                 f"Bins filled: {sum(1 for s in self.bin_samples if s is not None)}/{self.num_bins}"
             )
 
-        return self.bin_samples
+        # Convert to SamplingResult format
+        return self._create_sampling_result()
 
     def get_filled_samples(self) -> List[SamplePoint]:
         """Return only the non-None samples from bins."""
@@ -218,3 +220,70 @@ class BinarySearchSampler:
             "gaps": gaps,
             "total_evaluations": self.total_evals,
         }
+
+    def _create_sampling_result(self) -> SamplingResult:
+        """Create a SamplingResult from the current state."""
+        # Convert SamplePoints to CurvePoints
+        curve_points = []
+        for i, sample in enumerate(self.all_samples):
+            # Map input_value to desired_percentile (normalized to 0-1)
+            percentile = (sample.input_value - self.input_range[0]) / (
+                self.input_range[1] - self.input_range[0]
+            )
+            
+            # Extract performance from metadata if available, otherwise use output_value
+            performance = sample.metadata.get("performance", sample.output_value)
+            
+            curve_point = CurvePoint(
+                desired_percentile=percentile,
+                afhp=sample.output_value,  # output_value is treated as AFHP
+                performance=performance,
+                repeats_used=1,  # Single-axis sampler doesn't do repeats
+                order=i + 1,  # Order of evaluation
+            )
+            curve_points.append(curve_point)
+        
+        # Calculate coverage gap for the output axis
+        filled_samples = self.get_filled_samples()
+        output_gap = 0.0
+        
+        if len(filled_samples) > 1:
+            sorted_samples = sorted(filled_samples, key=lambda s: s.output_value)
+            output_min = sorted_samples[0].output_value
+            output_max = sorted_samples[-1].output_value
+            
+            if output_max > output_min:
+                # Find maximum normalized gap between consecutive samples
+                for i in range(len(sorted_samples) - 1):
+                    gap = (sorted_samples[i + 1].output_value - sorted_samples[i].output_value) / (
+                        output_max - output_min
+                    )
+                    output_gap = max(output_gap, gap)
+        
+        # Create info dict with single-axis specific information
+        info: Dict[str, Any] = {
+            "bins_filled": sum(1 for s in self.bin_samples if s is not None),
+            "total_bins": self.num_bins,
+            "coverage_percentage": 100.0 * sum(1 for s in self.bin_samples if s is not None) / self.num_bins,
+            "bin_edges": self.bin_edges.tolist(),
+            "output_range": self.output_range,
+            "input_range": self.input_range,
+        }
+        
+        # Find gaps in bin coverage
+        gaps = []
+        for i in range(self.num_bins):
+            if self.bin_samples[i] is None:
+                gaps.append((self.bin_edges[i], self.bin_edges[i + 1]))
+        if gaps:
+            info["uncovered_bins"] = gaps
+        
+        return SamplingResult(
+            points=curve_points,
+            coverage_x_max_gap=output_gap,  # For single-axis, x-axis represents the output
+            coverage_y_max_gap=0.0,  # Not applicable for single-axis sampling
+            total_evals=self.total_evals,
+            early_stop_reason=None,  # Single-axis doesn't have early stopping
+            monotonicity_violations_remaining=False,  # Not applicable for single-axis
+            info=info,  # Add the info dict with single-axis specific data
+        )

@@ -11,7 +11,7 @@ violating points (bounded by the overall evaluation budget).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Callable, List, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Dict, Any
 
 
 # -----------------------------
@@ -43,6 +43,7 @@ class SamplingResult:
     total_evals: int
     early_stop_reason: Optional[str]
     monotonicity_violations_remaining: bool
+    info: Optional[Dict[str, Any]] = None  # Optional info dict for additional data
 
 
 # --------------------
