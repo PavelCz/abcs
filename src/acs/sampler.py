@@ -9,7 +9,6 @@ from typing import List, Tuple, Callable, Optional, Any, Dict
 import numpy as np
 from numpy.typing import NDArray
 
-from acs.types import SamplePoint
 from acs.joint_sampler import CurvePoint, SamplingResult
 
 
@@ -59,8 +58,8 @@ class BinarySearchSampler:
         self.bin_edges: NDArray[np.float64] = np.linspace(
             output_range[0], output_range[1], num_bins + 1
         )
-        self.bin_samples: List[Optional[SamplePoint]] = [None] * num_bins
-        self.all_samples: List[SamplePoint] = []
+        self.bin_samples: List[Optional[CurvePoint]] = [None] * num_bins
+        self.all_samples: List[CurvePoint] = []
         self.total_evals: int = 0
 
     def determine_bin(self, output_value: float) -> int:
@@ -89,7 +88,7 @@ class BinarySearchSampler:
                 return True
         return False
 
-    def evaluate_at_input(self, input_value: float) -> SamplePoint:
+    def evaluate_at_input(self, input_value: float) -> CurvePoint:
         """Evaluate the function at the given input value (percentile)."""
         # Handle extremes specially
         if abs(input_value - self.input_range[0]) < 1e-9:
@@ -105,11 +104,20 @@ class BinarySearchSampler:
 
         self.total_evals += 1
 
-        sample = SamplePoint(
-            input_value=input_value, output_value=afhp, metadata=metadata
+        # Convert input_value to normalized percentile (0-1)
+        normalized_percentile = (input_value - self.input_range[0]) / (
+            self.input_range[1] - self.input_range[0]
         )
-        self.all_samples.append(sample)
-        return sample
+
+        curve_point = CurvePoint(
+            desired_percentile=normalized_percentile,
+            afhp=afhp,
+            performance=performance,
+            repeats_used=1,  # Single-axis sampler doesn't do repeats
+            order=len(self.all_samples) + 1,  # Order of evaluation
+        )
+        self.all_samples.append(curve_point)
+        return curve_point
 
     def binary_search_fill(
         self,
@@ -130,7 +138,7 @@ class BinarySearchSampler:
         sample = self.evaluate_at_input(middle_input)
 
         # Determine which bin this sample falls into
-        bin_idx = self.determine_bin(sample.output_value)
+        bin_idx = self.determine_bin(sample.afhp)
 
         # Only add to bin if it's empty
         if self.bin_samples[bin_idx] is None:
@@ -162,8 +170,8 @@ class BinarySearchSampler:
         right_sample = self.evaluate_at_input(self.input_range[1])
 
         # Place extreme samples in appropriate bins
-        left_bin = self.determine_bin(left_sample.output_value)
-        right_bin = self.determine_bin(right_sample.output_value)
+        left_bin = self.determine_bin(left_sample.afhp)
+        right_bin = self.determine_bin(right_sample.afhp)
 
         self.bin_samples[left_bin] = left_sample
         self.bin_samples[right_bin] = right_sample
@@ -185,42 +193,24 @@ class BinarySearchSampler:
 
     def _create_sampling_result(self) -> SamplingResult:
         """Create a SamplingResult from the current state."""
-        # Convert SamplePoints to CurvePoints
-        curve_points = []
-        for i, sample in enumerate(self.all_samples):
-            # Map input_value to desired_percentile (normalized to 0-1)
-            percentile = (sample.input_value - self.input_range[0]) / (
-                self.input_range[1] - self.input_range[0]
-            )
-
-            # Extract performance from metadata
-            performance = sample.metadata.get("performance")
-
-            curve_point = CurvePoint(
-                desired_percentile=percentile,
-                afhp=sample.output_value,  # output_value is treated as AFHP
-                performance=performance,
-                repeats_used=1,  # Single-axis sampler doesn't do repeats
-                order=i + 1,  # Order of evaluation
-            )
-            curve_points.append(curve_point)
+        # All samples are already CurvePoints, so we can use them directly
+        curve_points = self.all_samples
 
         # Calculate coverage gap for the output axis
         filled_samples = [s for s in self.bin_samples if s is not None]
         output_gap = 0.0
 
         if len(filled_samples) > 1:
-            sorted_samples = sorted(filled_samples, key=lambda s: s.output_value)
-            output_min = sorted_samples[0].output_value
-            output_max = sorted_samples[-1].output_value
+            sorted_samples = sorted(filled_samples, key=lambda s: s.afhp)
+            output_min = sorted_samples[0].afhp
+            output_max = sorted_samples[-1].afhp
 
             if output_max > output_min:
                 # Find maximum normalized gap between consecutive samples
                 for i in range(len(sorted_samples) - 1):
-                    gap = (
-                        sorted_samples[i + 1].output_value
-                        - sorted_samples[i].output_value
-                    ) / (output_max - output_min)
+                    gap = (sorted_samples[i + 1].afhp - sorted_samples[i].afhp) / (
+                        output_max - output_min
+                    )
                     output_gap = max(output_gap, gap)
 
         # Create info dict with single-axis specific information

@@ -5,16 +5,10 @@ These tests focus on the BinarySearchSampler which provides AFHP coverage
 using binary search to fill bins along the output axis.
 """
 
-import os
-import sys
 from typing import Callable, Tuple, Dict, Any
 
 import numpy as np
 
-# Ensure local src/ is importable before any installed package named acs
-sys.path.insert(
-    0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
-)
 from acs.sampler import BinarySearchSampler
 from tests.visualization_utils import (
     initialize_test_run,
