@@ -24,11 +24,13 @@ class BinarySearchSampler:
 
     def __init__(
         self,
-        eval_function: Callable[[float], Tuple[float, Dict[str, Any]]],
+        *,
+        eval_at_percentile: Callable[[float], Tuple[float, Dict[str, Any]]],
+        eval_at_lower_extreme: Callable[[], Tuple[float, Dict[str, Any]]],
+        eval_at_upper_extreme: Callable[[], Tuple[float, Dict[str, Any]]],
         num_bins: int,
-        input_range: Tuple[float, float] = (0.0, 100.0),
+        input_range: Tuple[float, float] = (0.0, 1.0),
         output_range: Tuple[float, float] = (0.0, 100.0),
-        input_to_threshold: Optional[Callable[[float], float]] = None,
         verbose: bool = True,
         return_bins: int = 0,
         max_additional_evals: int = 20,
@@ -37,22 +39,25 @@ class BinarySearchSampler:
         Initialize the ABCS sampler.
 
         Args:
-            eval_function: Function that takes an input value and returns
-                          (output_value, metadata_dict)
+            eval_at_percentile: Function that takes a percentile (0-1) and returns
+                               (output_value, metadata_dict)
+            eval_at_lower_extreme: Function that evaluates at the lower extreme and returns
+                                  (output_value, metadata_dict)
+            eval_at_upper_extreme: Function that evaluates at the upper extreme and returns
+                                  (output_value, metadata_dict)
             num_bins: Number of bins to divide the output space into
-            input_range: Range of valid input values (min, max)
+            input_range: Range of valid input percentile values (min, max), default (0.0, 1.0)
             output_range: Range of expected output values (min, max)
-            input_to_threshold: Optional function to convert input values
-                               to actual thresholds for evaluation
             verbose: Whether to print progress messages
             return_bins: Number of return bins for curve smoothing (0 = disabled)
             max_additional_evals: Maximum additional evaluations for return refinement
         """
-        self.eval_function = eval_function
+        self.eval_at_percentile = eval_at_percentile
+        self.eval_at_lower_extreme = eval_at_lower_extreme
+        self.eval_at_upper_extreme = eval_at_upper_extreme
         self.num_bins = num_bins
         self.input_range = input_range
         self.output_range = output_range
-        self.input_to_threshold = input_to_threshold or (lambda x: x)
         self.verbose = verbose
         self.return_bins = return_bins
         self.max_additional_evals = max_additional_evals
@@ -93,9 +98,17 @@ class BinarySearchSampler:
         return False
 
     def evaluate_at_input(self, input_value: float) -> SamplePoint:
-        """Evaluate the function at the given input value."""
-        threshold = self.input_to_threshold(input_value)
-        output_value, metadata = self.eval_function(threshold)
+        """Evaluate the function at the given input value (percentile)."""
+        # Handle extremes specially
+        if abs(input_value - self.input_range[0]) < 1e-9:
+            output_value, metadata = self.eval_at_lower_extreme()
+        elif abs(input_value - self.input_range[1]) < 1e-9:
+            output_value, metadata = self.eval_at_upper_extreme()
+        else:
+            # Convert input range to 0-1 percentile for eval_at_percentile
+            percentile = (input_value - self.input_range[0]) / (self.input_range[1] - self.input_range[0])
+            output_value, metadata = self.eval_at_percentile(percentile)
+        
         self.total_evals += 1
 
         sample = SamplePoint(
