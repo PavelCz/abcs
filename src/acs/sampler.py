@@ -24,9 +24,9 @@ class BinarySearchSampler:
     def __init__(
         self,
         *,
-        eval_at_percentile: Callable[[float], Tuple[float, Dict[str, Any]]],
-        eval_at_lower_extreme: Callable[[], Tuple[float, Dict[str, Any]]],
-        eval_at_upper_extreme: Callable[[], Tuple[float, Dict[str, Any]]],
+        eval_at_percentile: Callable[[float], Tuple[float, float, Dict[str, Any]]],
+        eval_at_lower_extreme: Callable[[], Tuple[float, float, Dict[str, Any]]],
+        eval_at_upper_extreme: Callable[[], Tuple[float, float, Dict[str, Any]]],
         num_bins: int,
         input_range: Tuple[float, float] = (0.0, 1.0),
         output_range: Tuple[float, float] = (0.0, 100.0),
@@ -37,9 +37,9 @@ class BinarySearchSampler:
 
         Args:
             eval_at_percentile: Function that takes a percentile (0-1) and returns
-                               (output_value, metadata_dict)
+                               (afhp, performance, metadata_dict)
             eval_at_lower_extreme: Function that evaluates at the lower extreme and returns
-                                  (output_value, metadata_dict)
+                                  (afhp, performance, metadata_dict)
             eval_at_upper_extreme: Function that evaluates at the upper extreme and returns
                                   (output_value, metadata_dict)
             num_bins: Number of bins to divide the output space into
@@ -93,20 +93,20 @@ class BinarySearchSampler:
         """Evaluate the function at the given input value (percentile)."""
         # Handle extremes specially
         if abs(input_value - self.input_range[0]) < 1e-9:
-            output_value, metadata = self.eval_at_lower_extreme()
+            afhp, performance, metadata = self.eval_at_lower_extreme()
         elif abs(input_value - self.input_range[1]) < 1e-9:
-            output_value, metadata = self.eval_at_upper_extreme()
+            afhp, performance, metadata = self.eval_at_upper_extreme()
         else:
             # Convert input range to 0-1 percentile for eval_at_percentile
             percentile = (input_value - self.input_range[0]) / (
                 self.input_range[1] - self.input_range[0]
             )
-            output_value, metadata = self.eval_at_percentile(percentile)
+            afhp, performance, metadata = self.eval_at_percentile(percentile)
 
         self.total_evals += 1
 
         sample = SamplePoint(
-            input_value=input_value, output_value=output_value, metadata=metadata
+            input_value=input_value, output_value=afhp, metadata=metadata
         )
         self.all_samples.append(sample)
         return sample
@@ -193,8 +193,8 @@ class BinarySearchSampler:
                 self.input_range[1] - self.input_range[0]
             )
 
-            # Extract performance from metadata if available, otherwise use output_value
-            performance = sample.metadata.get("performance", sample.output_value)
+            # Extract performance from metadata
+            performance = sample.metadata.get("performance")
 
             curve_point = CurvePoint(
                 desired_percentile=percentile,

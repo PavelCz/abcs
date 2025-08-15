@@ -86,9 +86,9 @@ class JointCoverageSampler:
     """Adaptive sampler achieving joint coverage on AFHP and performance.
 
     The sampler accepts three evaluation callables:
-      - eval_at_percentile(p): Evaluate at desired percentile p and return (afhp, performance)
-      - eval_at_lower_extreme(): Evaluate at the lower extreme and return (afhp, performance)
-      - eval_at_upper_extreme(): Evaluate at the upper extreme and return (afhp, performance)
+      - eval_at_percentile(p): Evaluate at desired percentile p and return (afhp, performance, metadata)
+      - eval_at_lower_extreme(): Evaluate at the lower extreme and return (afhp, performance, metadata)
+      - eval_at_upper_extreme(): Evaluate at the upper extreme and return (afhp, performance, metadata)
 
     The algorithm starts by evaluating extremes (assigned synthetic percentiles 0.0 and 1.0),
     then iteratively splits the worst normalized neighbor gap on either axis until both axes
@@ -98,9 +98,9 @@ class JointCoverageSampler:
     def __init__(
         self,
         *,
-        eval_at_percentile: Callable[[float], Tuple[float, float]],
-        eval_at_lower_extreme: Callable[[], Tuple[float, float]],
-        eval_at_upper_extreme: Callable[[], Tuple[float, float]],
+        eval_at_percentile: Callable[[float], Tuple[float, float, Dict[str, Any]]],
+        eval_at_lower_extreme: Callable[[], Tuple[float, float, Dict[str, Any]]],
+        eval_at_upper_extreme: Callable[[], Tuple[float, float, Dict[str, Any]]],
         coverage_fraction: float,
         max_total_evals: int,
     ) -> None:
@@ -160,7 +160,7 @@ class JointCoverageSampler:
             p_new = min(max(p_new, 0.0), 1.0)
 
             # Evaluate new point
-            afhp, performance = self._safe_eval_at_percentile(p_new)
+            afhp, performance, metadata = self._safe_eval_at_percentile(p_new)
             self._insert_point(p_new, afhp, performance)
 
         x_gap, y_gap = self._compute_current_gaps()
@@ -191,7 +191,7 @@ class JointCoverageSampler:
         if self._points:
             return
         # Assign synthetic percentiles 0.0 and 1.0 for extremes
-        afhp_low, perf_low = self._safe_eval_lower()
+        afhp_low, perf_low, metadata_low = self._safe_eval_lower()
         self._points.append(
             _PointState(
                 percentile=0.0,
@@ -201,7 +201,7 @@ class JointCoverageSampler:
             )
         )
 
-        afhp_high, perf_high = self._safe_eval_upper()
+        afhp_high, perf_high, metadata_high = self._safe_eval_upper()
         self._points.append(
             _PointState(
                 percentile=1.0,
@@ -218,23 +218,23 @@ class JointCoverageSampler:
     # Evaluations
     # -----------------
 
-    def _safe_eval_at_percentile(self, p: float) -> Tuple[float, float]:
-        afhp, performance = self._eval_at_percentile(p)
+    def _safe_eval_at_percentile(self, p: float) -> Tuple[float, float, Dict[str, Any]]:
+        afhp, performance, metadata = self._eval_at_percentile(p)
         self._validate_outputs(afhp, performance)
         self._total_evals += 1
-        return afhp, performance
+        return afhp, performance, metadata
 
-    def _safe_eval_lower(self) -> Tuple[float, float]:
-        afhp, performance = self._eval_lower()
+    def _safe_eval_lower(self) -> Tuple[float, float, Dict[str, Any]]:
+        afhp, performance, metadata = self._eval_lower()
         self._validate_outputs(afhp, performance)
         self._total_evals += 1
-        return afhp, performance
+        return afhp, performance, metadata
 
-    def _safe_eval_upper(self) -> Tuple[float, float]:
-        afhp, performance = self._eval_upper()
+    def _safe_eval_upper(self) -> Tuple[float, float, Dict[str, Any]]:
+        afhp, performance, metadata = self._eval_upper()
         self._validate_outputs(afhp, performance)
         self._total_evals += 1
-        return afhp, performance
+        return afhp, performance, metadata
 
     @staticmethod
     def _validate_outputs(afhp: float, performance: float) -> None:
@@ -387,19 +387,23 @@ class JointCoverageSampler:
 
             # If either is an extreme, re-evaluate via extremes; otherwise via percentile
             if abs(a_pt.percentile - 0.0) < 1e-12:
-                afhp_a, perf_a = self._safe_eval_lower()
+                afhp_a, perf_a, metadata_a = self._safe_eval_lower()
             elif abs(a_pt.percentile - 1.0) < 1e-12:
-                afhp_a, perf_a = self._safe_eval_upper()
+                afhp_a, perf_a, metadata_a = self._safe_eval_upper()
             else:
-                afhp_a, perf_a = self._safe_eval_at_percentile(a_pt.percentile)
+                afhp_a, perf_a, metadata_a = self._safe_eval_at_percentile(
+                    a_pt.percentile
+                )
             a_pt.add_observation(afhp_a, perf_a)
 
             if abs(b_pt.percentile - 0.0) < 1e-12:
-                afhp_b, perf_b = self._safe_eval_lower()
+                afhp_b, perf_b, metadata_b = self._safe_eval_lower()
             elif abs(b_pt.percentile - 1.0) < 1e-12:
-                afhp_b, perf_b = self._safe_eval_upper()
+                afhp_b, perf_b, metadata_b = self._safe_eval_upper()
             else:
-                afhp_b, perf_b = self._safe_eval_at_percentile(b_pt.percentile)
+                afhp_b, perf_b, metadata_b = self._safe_eval_at_percentile(
+                    b_pt.percentile
+                )
             b_pt.add_observation(afhp_b, perf_b)
 
             # Loop again to re-check after updated means

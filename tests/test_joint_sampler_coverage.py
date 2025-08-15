@@ -5,7 +5,7 @@ on both axes are below a desired fraction.
 
 import os
 import sys
-from typing import Callable, Tuple
+from typing import Callable, Tuple, Dict, Any
 
 import numpy as np
 
@@ -24,9 +24,9 @@ from tests.visualization_utils import (
 def make_eval_callables(
     add_noise: bool = True, full_range: bool = False
 ) -> Tuple[
-    Callable[[float], Tuple[float, float]],
-    Callable[[], Tuple[float, float]],
-    Callable[[], Tuple[float, float]],
+    Callable[[float], Tuple[float, float, Dict[str, Any]]],
+    Callable[[], Tuple[float, float, Dict[str, Any]]],
+    Callable[[], Tuple[float, float, Dict[str, Any]]],
 ]:
     """Factory producing the three required evaluation callables.
 
@@ -65,23 +65,26 @@ def make_eval_callables(
             value = float(value + rng.randn() * 0.5)
         return float(np.clip(value, base_return - 5.0, max_return + 5.0))
 
-    def eval_at_percentile(p: float) -> Tuple[float, float]:
+    def eval_at_percentile(p: float) -> Tuple[float, float, Dict[str, Any]]:
         threshold = float(np.clip(p, 0.0, 1.0) * 100.0)
         afhp = threshold_to_afhp(threshold)
         perf = afhp_to_performance(afhp)
-        return afhp, perf
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_lower_extreme() -> Tuple[float, float]:
+    def eval_at_lower_extreme() -> Tuple[float, float, Dict[str, Any]]:
         threshold = 0.0
         afhp = threshold_to_afhp(threshold)
-        perf = afhp_to_performance(afhp)
-        return afhp, perf
+        perf = afhp_to_performance(threshold)
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_upper_extreme() -> Tuple[float, float]:
+    def eval_at_upper_extreme() -> Tuple[float, float, Dict[str, Any]]:
         threshold = 100.0
         afhp = threshold_to_afhp(threshold)
-        perf = afhp_to_performance(afhp)
-        return afhp, perf
+        perf = afhp_to_performance(threshold)
+        metadata = {}
+        return afhp, perf, metadata
 
     return eval_at_percentile, eval_at_lower_extreme, eval_at_upper_extreme
 
@@ -138,19 +141,24 @@ def test_joint_coverage_pathological_converges():
     def performance_from_afhp(afhp: float) -> float:
         return 20.0 + 60.0 * (afhp / 100.0) ** 3
 
-    def eval_at_percentile(p: float) -> Tuple[float, float]:
+    def eval_at_percentile(p: float) -> Tuple[float, float, Dict[str, Any]]:
         threshold = float(np.clip(p, 0.0, 1.0) * 100.0)
         afhp = pathological_threshold_to_afhp(threshold)
         perf = performance_from_afhp(afhp)
-        return afhp, perf
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_lower_extreme() -> Tuple[float, float]:
+    def eval_at_lower_extreme() -> Tuple[float, float, Dict[str, Any]]:
         afhp = pathological_threshold_to_afhp(0.0)
-        return afhp, performance_from_afhp(afhp)
+        perf = performance_from_afhp(afhp)
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_upper_extreme() -> Tuple[float, float]:
+    def eval_at_upper_extreme() -> Tuple[float, float, Dict[str, Any]]:
         afhp = pathological_threshold_to_afhp(100.0)
-        return afhp, performance_from_afhp(afhp)
+        perf = performance_from_afhp(afhp)
+        metadata = {}
+        return afhp, perf, metadata
 
     sampler = JointCoverageSampler(
         eval_at_percentile=eval_at_percentile,
@@ -221,13 +229,16 @@ def test_edge_case_constant_performance():
     # Performance is constant; y-range is degenerate and treated as covered
     def eval_p(p: float):
         afhp = float(p * 100.0)
-        return afhp, 50.0
+        metadata = {}
+        return afhp, 50.0, metadata
 
     def eval_lo():
-        return 0.0, 50.0
+        metadata = {}
+        return 0.0, 50.0, metadata
 
     def eval_hi():
-        return 100.0, 50.0
+        metadata = {}
+        return 100.0, 50.0, metadata
 
     sampler = JointCoverageSampler(
         eval_at_percentile=eval_p,
@@ -256,13 +267,16 @@ def test_edge_case_minimal_samples_region():
         else:
             afhp = 50.0
         perf = 60.0 if afhp >= 50.0 else 50.0
-        return float(afhp), float(perf)
+        metadata = {}
+        return float(afhp), float(perf), metadata
 
     def eval_lo():
-        return 50.0, 50.0
+        metadata = {}
+        return 50.0, 50.0, metadata
 
     def eval_hi():
-        return 55.0, 60.0
+        metadata = {}
+        return 55.0, 60.0, metadata
 
     sampler = JointCoverageSampler(
         eval_at_percentile=eval_p,
@@ -293,13 +307,16 @@ def test_edge_case_extreme_return_ranges():
             perf = 990.0
         else:
             perf = 500.0
-        return float(afhp), float(perf)
+        metadata = {}
+        return float(afhp), float(perf), metadata
 
     def eval_lo():
-        return 0.0, 10.0
+        metadata = {}
+        return 0.0, 10.0, metadata
 
     def eval_hi():
-        return 100.0, 990.0
+        metadata = {}
+        return 100.0, 990.0, metadata
 
     sampler = JointCoverageSampler(
         eval_at_percentile=eval_p,

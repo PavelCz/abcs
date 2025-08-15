@@ -67,26 +67,26 @@ def make_eval_callables(
             value = float(value + rng.randn() * 0.5)
         return float(np.clip(value, base_return - 5.0, max_return + 5.0))
 
-    def eval_at_percentile(p: float) -> Tuple[float, Dict[str, Any]]:
+    def eval_at_percentile(p: float) -> Tuple[float, float, Dict[str, Any]]:
         threshold = float(np.clip(p, 0.0, 1.0) * 100.0)
         afhp = threshold_to_afhp(threshold)
         perf = afhp_to_performance(afhp)
-        metadata = {"threshold": threshold, "performance": perf}
-        return afhp, metadata
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_lower_extreme() -> Tuple[float, Dict[str, Any]]:
+    def eval_at_lower_extreme() -> Tuple[float, float, Dict[str, Any]]:
         threshold = 0.0
         afhp = threshold_to_afhp(threshold)
-        perf = afhp_to_performance(afhp)
-        metadata = {"threshold": threshold, "performance": perf}
-        return afhp, metadata
+        perf = afhp_to_performance(threshold)
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_upper_extreme() -> Tuple[float, Dict[str, Any]]:
+    def eval_at_upper_extreme() -> Tuple[float, float, Dict[str, Any]]:
         threshold = 100.0
         afhp = threshold_to_afhp(threshold)
-        perf = afhp_to_performance(afhp)
-        metadata = {"threshold": threshold, "performance": perf}
-        return afhp, metadata
+        perf = afhp_to_performance(threshold)
+        metadata = {}
+        return afhp, perf, metadata
 
     return eval_at_percentile, eval_at_lower_extreme, eval_at_upper_extreme
 
@@ -168,24 +168,24 @@ def test_pathological_curve():
     def performance_from_afhp(afhp: float) -> float:
         return 20.0 + 60.0 * (afhp / 100.0) ** 3
 
-    def eval_at_percentile(p: float) -> Tuple[float, Dict[str, Any]]:
+    def eval_at_percentile(p: float) -> Tuple[float, float, Dict[str, Any]]:
         threshold = float(np.clip(p, 0.0, 1.0) * 100.0)
         afhp = pathological_threshold_to_afhp(threshold)
         perf = performance_from_afhp(afhp)
-        metadata = {"threshold": threshold, "performance": perf}
-        return afhp, metadata
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_lower_extreme() -> Tuple[float, Dict[str, Any]]:
+    def eval_at_lower_extreme() -> Tuple[float, float, Dict[str, Any]]:
         afhp = pathological_threshold_to_afhp(0.0)
         perf = performance_from_afhp(afhp)
-        metadata = {"threshold": 0.0, "performance": perf}
-        return afhp, metadata
+        metadata = {}
+        return afhp, perf, metadata
 
-    def eval_at_upper_extreme() -> Tuple[float, Dict[str, Any]]:
+    def eval_at_upper_extreme() -> Tuple[float, float, Dict[str, Any]]:
         afhp = pathological_threshold_to_afhp(100.0)
         perf = performance_from_afhp(afhp)
-        metadata = {"threshold": 100.0, "performance": perf}
-        return afhp, metadata
+        metadata = {}
+        return afhp, perf, metadata
 
     sampler = BinarySearchSampler(
         eval_at_percentile=eval_at_percentile,
@@ -214,17 +214,17 @@ def test_pathological_curve():
 def test_constant_output():
     """Test edge case where output is constant."""
 
-    def eval_p(p: float) -> Tuple[float, Dict[str, Any]]:
-        metadata = {"threshold": p * 100.0, "performance": 50.0}
-        return 50.0, metadata
+    def eval_p(p: float) -> Tuple[float, float, Dict[str, Any]]:
+        metadata = {}
+        return 50.0, 50.0, metadata
 
-    def eval_lo() -> Tuple[float, Dict[str, Any]]:
-        metadata = {"threshold": 0.0, "performance": 50.0}
-        return 50.0, metadata
+    def eval_lo() -> Tuple[float, float, Dict[str, Any]]:
+        metadata = {}
+        return 50.0, 50.0, metadata
 
-    def eval_hi() -> Tuple[float, Dict[str, Any]]:
-        metadata = {"threshold": 100.0, "performance": 50.0}
-        return 50.0, metadata
+    def eval_hi() -> Tuple[float, float, Dict[str, Any]]:
+        metadata = {}
+        return 50.0, 50.0, metadata
 
     sampler = BinarySearchSampler(
         eval_at_percentile=eval_p,
@@ -255,7 +255,7 @@ def test_constant_output():
 def test_extreme_output_ranges():
     """Test with very wide output range but smooth transitions to avoid recursion."""
 
-    def eval_p(p: float) -> Tuple[float, Dict[str, Any]]:
+    def eval_p(p: float) -> Tuple[float, float, Dict[str, Any]]:
         thr = p * 100.0
         # Smooth transitions to avoid step function recursion issues
         if thr < 25.0:
@@ -265,16 +265,16 @@ def test_extreme_output_ranges():
         else:
             afhp = 50.0 + ((thr - 25.0) / 50.0) * 450.0  # 50-500
         perf = afhp * 0.1  # Simple performance mapping
-        metadata = {"threshold": thr, "performance": perf}
-        return float(afhp), metadata
+        metadata = {}
+        return float(afhp), perf, metadata
 
-    def eval_lo() -> Tuple[float, Dict[str, Any]]:
-        metadata = {"threshold": 0.0, "performance": 1.0}
-        return 10.0, metadata
+    def eval_lo() -> Tuple[float, float, Dict[str, Any]]:
+        metadata = {}
+        return 10.0, 1.0, metadata
 
-    def eval_hi() -> Tuple[float, Dict[str, Any]]:
-        metadata = {"threshold": 100.0, "performance": 99.0}
-        return 990.0, metadata
+    def eval_hi() -> Tuple[float, float, Dict[str, Any]]:
+        metadata = {}
+        return 990.0, 99.0, metadata
 
     sampler = BinarySearchSampler(
         eval_at_percentile=eval_p,
@@ -303,23 +303,25 @@ def test_extreme_output_ranges():
 def test_narrow_output_region():
     """Test with AFHP varying smoothly in a narrow region to avoid recursion."""
 
-    def eval_p(p: float) -> Tuple[float, Dict[str, Any]]:
+    def eval_p(p: float) -> Tuple[float, float, Dict[str, Any]]:
         thr = p * 100.0
         # Smooth variation to avoid step function recursion
         afhp = 50.0 + 5.0 * np.sin(thr * np.pi / 50.0)  # Varies between 45-55
         perf = 55.0 + afhp * 0.2  # Simple performance mapping
-        metadata = {"threshold": thr, "performance": perf}
-        return float(afhp), metadata
+        metadata = {}
+        return float(afhp), perf, metadata
 
-    def eval_lo() -> Tuple[float, Dict[str, Any]]:
+    def eval_lo() -> Tuple[float, float, Dict[str, Any]]:
         afhp = 50.0 + 5.0 * np.sin(0)  # 50.0
-        metadata = {"threshold": 0.0, "performance": 55.0 + afhp * 0.2}
-        return float(afhp), metadata
+        perf = 55.0 + afhp * 0.2
+        metadata = {}
+        return float(afhp), perf, metadata
 
-    def eval_hi() -> Tuple[float, Dict[str, Any]]:
+    def eval_hi() -> Tuple[float, float, Dict[str, Any]]:
         afhp = 50.0 + 5.0 * np.sin(100.0 * np.pi / 50.0)  # ~50.0
-        metadata = {"threshold": 100.0, "performance": 55.0 + afhp * 0.2}
-        return float(afhp), metadata
+        perf = 55.0 + afhp * 0.2
+        metadata = {}
+        return float(afhp), perf, metadata
 
     sampler = BinarySearchSampler(
         eval_at_percentile=eval_p,
