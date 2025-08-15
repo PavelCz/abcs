@@ -8,8 +8,9 @@ from .joint_sampler import (
     JointCoverageSampler,
     CurvePoint,
     SamplingResult,
-    BinarySearchSampler,
 )
+
+from .sampler import BinarySearchSampler
 
 __version__ = "0.1.0"
 __all__ = [
