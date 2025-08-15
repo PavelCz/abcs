@@ -21,16 +21,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # type: ignore
 
-# Import types
-from acs import CurvePoint, SamplingResult
-from acs.types import SamplePoint
-from acs.sampler import BinarySearchSampler
-
 # Type imports for annotations
-from typing import TYPE_CHECKING, Any
-if TYPE_CHECKING:
-    from acs.types import SamplePoint as SamplePointType
-    from acs.sampler import BinarySearchSampler as BinarySearchSamplerType
+from typing import Any
 
 
 _CURRENT_TEST_RUN_TIMESTAMP: Optional[str] = None
@@ -48,6 +40,7 @@ def _cleanup_old_artifact_folders(max_folders: int = 5) -> None:
     timestamped_dirs.sort(key=lambda x: x.name)
     if len(timestamped_dirs) >= max_folders:
         import shutil
+
         for old_folder in timestamped_dirs[: -max_folders + 1]:
             shutil.rmtree(old_folder)
             print(f"🗑️ Removed old test artifacts: {old_folder.name}")
@@ -122,9 +115,7 @@ def plot_percentile_to_afhp(points: List[Any], test_name: str) -> Optional[Path]
     return path
 
 
-def plot_afhp_to_performance(
-    points: List[Any], test_name: str
-) -> Optional[Path]:
+def plot_afhp_to_performance(points: List[Any], test_name: str) -> Optional[Path]:
     if not points:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
@@ -208,15 +199,15 @@ def plot_input_to_output(samples: List[Any], test_name: str) -> Optional[Path]:
 
     x = [s.input_value for s in samples]
     y = [s.output_value for s in samples]
-    
+
     plt.figure(figsize=(8, 5))
-    plt.scatter(x, y, s=40, alpha=0.8, c='blue')
-    
+    plt.scatter(x, y, s=40, alpha=0.8, c="blue")
+
     # Sort by input for line plot
     sorted_pairs = sorted(zip(x, y))
     sorted_x, sorted_y = zip(*sorted_pairs)
-    plt.plot(sorted_x, sorted_y, alpha=0.5, color='blue', linewidth=1)
-    
+    plt.plot(sorted_x, sorted_y, alpha=0.5, color="blue", linewidth=1)
+
     plt.xlabel("Input Value (percentile)")
     plt.ylabel("Output Value (AFHP)")
     plt.title(f"Input to Output Mapping - {test_name}")
@@ -232,29 +223,29 @@ def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[P
     """Plot output values (AFHP) to performance values (from metadata)."""
     if not samples:
         return None
-    
+
     # Extract performance values from metadata
     performance_values = []
     output_values = []
-    
+
     for sample in samples:
         if "performance" in sample.metadata:
             performance_values.append(sample.metadata["performance"])
             output_values.append(sample.output_value)
-    
+
     if not performance_values:
         return None
-    
+
     artifacts_dir = create_test_artifacts_dir(test_name)
-    
+
     plt.figure(figsize=(8, 5))
-    plt.scatter(output_values, performance_values, s=40, alpha=0.8, c='red')
-    
+    plt.scatter(output_values, performance_values, s=40, alpha=0.8, c="red")
+
     # Sort by output for line plot
     sorted_pairs = sorted(zip(output_values, performance_values))
     sorted_x, sorted_y = zip(*sorted_pairs)
-    plt.plot(sorted_x, sorted_y, alpha=0.5, color='red', linewidth=1)
-    
+    plt.plot(sorted_x, sorted_y, alpha=0.5, color="red", linewidth=1)
+
     plt.xlabel("Output Value (AFHP)")
     plt.ylabel("Performance")
     plt.title(f"Output to Performance Mapping - {test_name}")
@@ -266,40 +257,45 @@ def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[P
     return path
 
 
-def plot_bin_coverage(samples: List[Any], sampler: Any, test_name: str) -> Optional[Path]:
+def plot_bin_coverage(
+    samples: List[Any], sampler: Any, test_name: str
+) -> Optional[Path]:
     """Plot bin coverage showing which bins were filled."""
     if not samples:
         return None
-    
+
     artifacts_dir = create_test_artifacts_dir(test_name)
-    
+
     # Create histogram of output values with bin edges
     output_values = [s.output_value for s in samples]
-    
+
     plt.figure(figsize=(10, 6))
-    
+
     # Plot histogram
-    plt.hist(output_values, bins=sampler.bin_edges, alpha=0.7, edgecolor='black')
-    
+    plt.hist(output_values, bins=sampler.bin_edges, alpha=0.7, edgecolor="black")
+
     # Mark bin edges
     for edge in sampler.bin_edges:
-        plt.axvline(x=edge, color='red', linestyle='--', alpha=0.5)
-    
+        plt.axvline(x=edge, color="red", linestyle="--", alpha=0.5)
+
     plt.xlabel("Output Value (AFHP)")
     plt.ylabel("Number of Samples per Bin")
     plt.title(f"Bin Coverage - {test_name}")
     plt.grid(True, alpha=0.3)
-    
+
     # Add text showing coverage stats
     summary = sampler.get_coverage_summary()
-    plt.text(0.02, 0.98, 
-             f"Bins filled: {summary['bins_filled']}/{sampler.num_bins}\n"
-             f"Coverage: {summary['coverage_percentage']:.1f}%\n"
-             f"Total evals: {summary['total_evaluations']}", 
-             transform=plt.gca().transAxes, 
-             verticalalignment='top',
-             bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
-    
+    plt.text(
+        0.02,
+        0.98,
+        f"Bins filled: {summary['bins_filled']}/{sampler.num_bins}\n"
+        f"Coverage: {summary['coverage_percentage']:.1f}%\n"
+        f"Total evals: {summary['total_evaluations']}",
+        transform=plt.gca().transAxes,
+        verticalalignment="top",
+        bbox=dict(boxstyle="round", facecolor="wheat", alpha=0.8),
+    )
+
     path = artifacts_dir / "bin_coverage.png"
     plt.tight_layout()
     plt.savefig(path, dpi=150, bbox_inches="tight")
@@ -312,15 +308,15 @@ def save_single_axis_artifacts(
 ) -> Dict[str, Optional[Path]]:
     """Save all artifacts for single-axis sampler test results."""
     artifacts_dir = create_test_artifacts_dir(test_name)
-    
+
     # Generate plots
     input_output_plot = plot_input_to_output(samples, test_name)
     output_perf_plot = plot_output_to_performance(samples, test_name)
     bin_coverage_plot = plot_bin_coverage(samples, sampler, test_name)
-    
+
     # Get coverage summary
     summary = sampler.get_coverage_summary()
-    
+
     # Save summary
     summary_file = artifacts_dir / "summary.txt"
     with open(summary_file, "w") as f:
@@ -332,11 +328,11 @@ def save_single_axis_artifacts(
         f.write(f"Coverage percentage: {summary['coverage_percentage']:.2f}%\n")
         f.write(f"Output range covered: {summary['output_range_covered']}\n")
         f.write(f"Number of gaps: {len(summary['gaps'])}\n")
-        if summary['gaps']:
+        if summary["gaps"]:
             f.write("Gap ranges:\n")
-            for i, (gap_start, gap_end) in enumerate(summary['gaps']):
-                f.write(f"  Gap {i+1}: [{gap_start:.2f}, {gap_end:.2f}]\n")
-    
+            for i, (gap_start, gap_end) in enumerate(summary["gaps"]):
+                f.write(f"  Gap {i + 1}: [{gap_start:.2f}, {gap_end:.2f}]\n")
+
     # Save sample points
     points_file = artifacts_dir / "points.tsv"
     with open(points_file, "w") as f:
@@ -344,8 +340,10 @@ def save_single_axis_artifacts(
         for sample in samples:
             threshold = sample.metadata.get("threshold", "N/A")
             performance = sample.metadata.get("performance", "N/A")
-            f.write(f"{sample.input_value:.6f}\t{sample.output_value:.6f}\t{threshold}\t{performance}\n")
-    
+            f.write(
+                f"{sample.input_value:.6f}\t{sample.output_value:.6f}\t{threshold}\t{performance}\n"
+            )
+
     return {
         "input_to_output": input_output_plot,
         "output_to_performance": output_perf_plot,

@@ -218,12 +218,3 @@ class BinarySearchSampler:
             "gaps": gaps,
             "total_evaluations": self.total_evals,
         }
-
-    def run_with_return_refinement(self) -> List[Optional[SamplePoint]]:
-        """
-        Run the sampling algorithm.
-
-        Returns:
-            List of samples from the binary search
-        """
-        return self.run()

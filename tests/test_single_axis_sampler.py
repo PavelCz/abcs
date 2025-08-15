@@ -16,7 +16,6 @@ sys.path.insert(
     0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "src"))
 )
 from acs.sampler import BinarySearchSampler
-from acs.types import SamplePoint
 from tests.visualization_utils import (
     initialize_test_run,
     save_single_axis_artifacts,
@@ -103,24 +102,24 @@ def test_basic_bin_filling():
         output_range=(0.0, 100.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     # Check that we have samples
     filled_samples = sampler.get_filled_samples()
     assert len(filled_samples) > 0
-    
+
     # Check that samples are within expected range
     for sample in filled_samples:
         assert 0.0 <= sample.output_value <= 100.0
         assert 0.0 <= sample.input_value <= 1.0
-    
+
     # Check coverage summary
     summary = sampler.get_coverage_summary()
     assert summary["total_evaluations"] > 0
     assert summary["bins_filled"] == len(filled_samples)
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="basic_bin_filling"
     )
@@ -138,17 +137,17 @@ def test_sigmoid_curve_noise():
         output_range=(0.0, 100.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     filled_samples = sampler.get_filled_samples()
     assert len(filled_samples) > 0
-    
+
     # With sigmoid curve, we expect good coverage in the middle range
     summary = sampler.get_coverage_summary()
     assert summary["coverage_percentage"] > 50.0  # Should fill at least half the bins
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="sigmoid_curve_noise"
     )
@@ -196,17 +195,17 @@ def test_pathological_curve():
         output_range=(0.0, 100.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     filled_samples = sampler.get_filled_samples()
     assert len(filled_samples) > 0
-    
+
     # Should handle pathological case without crashing
     summary = sampler.get_coverage_summary()
     assert summary["total_evaluations"] > 0
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="pathological_curve"
     )
@@ -215,6 +214,7 @@ def test_pathological_curve():
 
 def test_constant_output():
     """Test edge case where output is constant."""
+
     def eval_p(p: float) -> Tuple[float, Dict[str, Any]]:
         metadata = {"threshold": p * 100.0, "performance": 50.0}
         return 50.0, metadata
@@ -235,16 +235,16 @@ def test_constant_output():
         output_range=(40.0, 60.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     filled_samples = sampler.get_filled_samples()
-    
+
     # With constant output, all samples should be in the same bin
     assert len(filled_samples) == 1
     assert filled_samples[0].output_value == 50.0
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="constant_output"
     )
@@ -253,6 +253,7 @@ def test_constant_output():
 
 def test_extreme_output_ranges():
     """Test with very wide output range but smooth transitions to avoid recursion."""
+
     def eval_p(p: float) -> Tuple[float, Dict[str, Any]]:
         thr = p * 100.0
         # Smooth transitions to avoid step function recursion issues
@@ -282,17 +283,17 @@ def test_extreme_output_ranges():
         output_range=(0.0, 1000.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     filled_samples = sampler.get_filled_samples()
     assert len(filled_samples) > 0
-    
+
     # Should handle extreme ranges without crashing
     summary = sampler.get_coverage_summary()
     assert summary["total_evaluations"] > 0
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="extreme_output_ranges"
     )
@@ -301,6 +302,7 @@ def test_extreme_output_ranges():
 
 def test_narrow_output_region():
     """Test with AFHP varying smoothly in a narrow region to avoid recursion."""
+
     def eval_p(p: float) -> Tuple[float, Dict[str, Any]]:
         thr = p * 100.0
         # Smooth variation to avoid step function recursion
@@ -327,17 +329,17 @@ def test_narrow_output_region():
         output_range=(45.0, 60.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     filled_samples = sampler.get_filled_samples()
     assert len(filled_samples) > 0
-    
+
     # Should handle narrow variation region
     summary = sampler.get_coverage_summary()
     assert 0.0 <= summary["coverage_percentage"] <= 100.0
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="narrow_output_region"
     )
@@ -348,7 +350,7 @@ def test_different_bin_counts():
     """Test sampler with different numbers of bins."""
     initialize_test_run()
     eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=False, full_range=True)
-    
+
     for num_bins in [5, 10, 20, 50]:
         sampler = BinarySearchSampler(
             eval_at_percentile=eval_p,
@@ -358,60 +360,25 @@ def test_different_bin_counts():
             output_range=(0.0, 100.0),
             verbose=True,
         )
-        
+
         bin_samples = sampler.run()
         filled_samples = sampler.get_filled_samples()
-        
+
         # More bins should generally result in more evaluations
         summary = sampler.get_coverage_summary()
         assert summary["total_evaluations"] >= 2  # At least the extremes
         assert len(filled_samples) <= num_bins  # Can't fill more bins than exist
-        
+
         artifacts = save_single_axis_artifacts(
             filled_samples, sampler, test_name=f"bins_{num_bins}"
         )
         print_artifact_summary(artifacts)
 
 
-def test_run_with_return_refinement():
-    """Test that run_with_return_refinement works the same as run()."""
-    eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=False, full_range=False)
-    sampler = BinarySearchSampler(
-        eval_at_percentile=eval_p,
-        eval_at_lower_extreme=eval_lo,
-        eval_at_upper_extreme=eval_hi,
-        num_bins=10,
-        output_range=(0.0, 100.0),
-        verbose=True,
-    )
-    
-    initialize_test_run()
-    
-    # Both methods should return the same result
-    result1 = sampler.run()
-    
-    # Reset sampler state
-    sampler.bin_samples = [None] * sampler.num_bins
-    sampler.all_samples = []
-    sampler.total_evals = 0
-    
-    result2 = sampler.run_with_return_refinement()
-    
-    # Results should be equivalent (same number of filled bins)
-    filled1 = [s for s in result1 if s is not None]
-    filled2 = [s for s in result2 if s is not None]
-    assert len(filled1) == len(filled2)
-    
-    artifacts = save_single_axis_artifacts(
-        filled1, sampler, test_name="run_with_return_refinement"
-    )
-    print_artifact_summary(artifacts)
-
-
 def test_input_range_customization():
     """Test sampler with custom input range."""
     eval_p, eval_lo, eval_hi = make_eval_callables(add_noise=False, full_range=True)
-    
+
     # Use custom input range
     sampler = BinarySearchSampler(
         eval_at_percentile=eval_p,
@@ -422,17 +389,17 @@ def test_input_range_customization():
         output_range=(0.0, 100.0),
         verbose=True,
     )
-    
+
     initialize_test_run()
     bin_samples = sampler.run()
-    
+
     filled_samples = sampler.get_filled_samples()
     assert len(filled_samples) > 0
-    
+
     # All input values should be within the custom range
     for sample in filled_samples:
         assert 0.2 <= sample.input_value <= 0.8
-    
+
     artifacts = save_single_axis_artifacts(
         filled_samples, sampler, test_name="custom_input_range"
     )
@@ -448,6 +415,5 @@ if __name__ == "__main__":
     test_extreme_output_ranges()
     test_narrow_output_region()
     test_different_bin_counts()
-    test_run_with_return_refinement()
     test_input_range_customization()
     print("All single-axis sampler tests passed!")
