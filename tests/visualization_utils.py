@@ -16,24 +16,15 @@ from typing import Dict, List, Optional
 import datetime
 import os
 
-try:
-    import matplotlib
+import matplotlib
 
-    matplotlib.use("Agg")
-    import matplotlib.pyplot as plt  # type: ignore
-except Exception:  # pragma: no cover
-    plt = None  # type: ignore
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # type: ignore
 
-# Lazily import types to avoid circular issues during test discovery
-try:
-    from acs import CurvePoint, SamplingResult
-    from acs.types import SamplePoint
-    from acs.sampler import BinarySearchSampler
-except Exception:  # pragma: no cover
-    CurvePoint = object  # type: ignore
-    SamplingResult = object  # type: ignore
-    SamplePoint = object  # type: ignore
-    BinarySearchSampler = object  # type: ignore
+# Import types
+from acs import CurvePoint, SamplingResult
+from acs.types import SamplePoint
+from acs.sampler import BinarySearchSampler
 
 # Type imports for annotations
 from typing import TYPE_CHECKING, Any
@@ -52,21 +43,14 @@ def _cleanup_old_artifact_folders(max_folders: int = 5) -> None:
     timestamped_dirs = []
     for item in artifacts_root.iterdir():
         if item.is_dir() and len(item.name) == 15 and "_" in item.name:
-            try:
-                datetime.datetime.strptime(item.name, "%Y%m%d_%H%M%S")
-                timestamped_dirs.append(item)
-            except ValueError:
-                continue
+            datetime.datetime.strptime(item.name, "%Y%m%d_%H%M%S")
+            timestamped_dirs.append(item)
     timestamped_dirs.sort(key=lambda x: x.name)
     if len(timestamped_dirs) >= max_folders:
+        import shutil
         for old_folder in timestamped_dirs[: -max_folders + 1]:
-            try:
-                import shutil
-
-                shutil.rmtree(old_folder)
-                print(f"🗑️ Removed old test artifacts: {old_folder.name}")
-            except Exception as e:
-                print(f"⚠️ Warning: Could not remove old folder {old_folder.name}: {e}")
+            shutil.rmtree(old_folder)
+            print(f"🗑️ Removed old test artifacts: {old_folder.name}")
 
 
 def initialize_test_run() -> str:
@@ -110,7 +94,7 @@ def create_test_artifacts_dir(test_name: str) -> Path:
 
 
 def plot_percentile_to_afhp(points: List[Any], test_name: str) -> Optional[Path]:
-    if plt is None or not points:
+    if not points:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
 
@@ -120,16 +104,13 @@ def plot_percentile_to_afhp(points: List[Any], test_name: str) -> Optional[Path]
     plt.scatter(x, y, s=40, alpha=0.8)
     # Label with sampling order
     for p in points:
-        try:
-            plt.annotate(
-                str(p.order),
-                (p.desired_percentile, p.afhp),
-                textcoords="offset points",
-                xytext=(4, 4),
-                fontsize=8,
-            )
-        except Exception:
-            pass
+        plt.annotate(
+            str(p.order),
+            (p.desired_percentile, p.afhp),
+            textcoords="offset points",
+            xytext=(4, 4),
+            fontsize=8,
+        )
     plt.xlabel("Percentile (input)")
     plt.ylabel("AFHP (x)")
     plt.title(f"Percentile to AFHP - {test_name}")
@@ -144,7 +125,7 @@ def plot_percentile_to_afhp(points: List[Any], test_name: str) -> Optional[Path]
 def plot_afhp_to_performance(
     points: List[Any], test_name: str
 ) -> Optional[Path]:
-    if plt is None or not points:
+    if not points:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
     x = [p.afhp for p in points]
@@ -153,16 +134,13 @@ def plot_afhp_to_performance(
     plt.scatter(x, y, s=40, alpha=0.8)
     # Label with sampling order
     for p in points:
-        try:
-            plt.annotate(
-                str(p.order),
-                (p.afhp, p.performance),
-                textcoords="offset points",
-                xytext=(4, 4),
-                fontsize=8,
-            )
-        except Exception:
-            pass
+        plt.annotate(
+            str(p.order),
+            (p.afhp, p.performance),
+            textcoords="offset points",
+            xytext=(4, 4),
+            fontsize=8,
+        )
     plt.xlabel("AFHP (x)")
     plt.ylabel("Performance (y)")
     plt.title(f"AFHP to Performance - {test_name}")
@@ -224,7 +202,7 @@ def print_artifact_summary(artifacts: Dict[str, Optional[Path]]) -> None:
 
 def plot_input_to_output(samples: List[Any], test_name: str) -> Optional[Path]:
     """Plot input values (percentiles) to output values (AFHP)."""
-    if plt is None or not samples:
+    if not samples:
         return None
     artifacts_dir = create_test_artifacts_dir(test_name)
 
@@ -252,7 +230,7 @@ def plot_input_to_output(samples: List[Any], test_name: str) -> Optional[Path]:
 
 def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[Path]:
     """Plot output values (AFHP) to performance values (from metadata)."""
-    if plt is None or not samples:
+    if not samples:
         return None
     
     # Extract performance values from metadata
@@ -290,7 +268,7 @@ def plot_output_to_performance(samples: List[Any], test_name: str) -> Optional[P
 
 def plot_bin_coverage(samples: List[Any], sampler: Any, test_name: str) -> Optional[Path]:
     """Plot bin coverage showing which bins were filled."""
-    if plt is None or not samples:
+    if not samples:
         return None
     
     artifacts_dir = create_test_artifacts_dir(test_name)
