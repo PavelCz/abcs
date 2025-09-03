@@ -23,6 +23,7 @@ class CurvePoint:
     performance: float
     repeats_used: int
     order: int
+    meta: Optional[Dict[str, Any]] = None
 
 
 @dataclass

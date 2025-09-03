@@ -116,6 +116,7 @@ class BinarySearchSampler:
             performance=performance,
             repeats_used=1,  # Single-axis sampler doesn't do repeats
             order=len(self.all_samples) + 1,  # Order of evaluation
+            meta=metadata,
         )
         self.all_samples.append(curve_point)
         return curve_point
